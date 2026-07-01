@@ -1,11 +1,27 @@
 version: 2
 
 semantic_models:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # COHORT-LEVEL GRADUATION RATE
+  # Use for: graduation rate trends, Pell equity analysis, completion by school
+  # Answers: "How have graduation rates for Pell-eligible students shifted?"
+  # ─────────────────────────────────────────────────────────────────────────────
   - name: graduation_rate
     description: >
-      Graduation rate pre-aggregated across degtype, u_g, gender, school,
-      pell, and cohort_year (matured cohorts only). Any combination of
-      these dimensions can be used to group/filter.
+      Graduation rate fact table, one row per (degtype, u_g, gender, school,
+      pell, cohort_year). COHORT LEVEL -- cohort_year is the ENTRY year, not
+      graduation year. A 2015 cohort = students who started in 2015 and were
+      tracked until graduation.
+
+      MATURED COHORT FILTER IS PRE-APPLIED: immature recent cohorts are already
+      excluded (U=4yr window, G=2yr, D=5yr). Do NOT add extra WHERE clauses for
+      maturity -- just query directly.
+
+      RATE CALCULATION: always SUM(graduated_count) / SUM(cohort_size) * 100.
+      Never AVG(graduation_rate_pct) -- that produces wrong weighted averages.
+
+      X-AXIS FOR TREND CHARTS: cohort_year
     model: ref('fct_graduation_rate')
     defaults:
       agg_time_dimension: cohort_start_date
@@ -21,33 +37,95 @@ semantic_models:
         expr: to_date(cast(cohort_year as varchar) || '-09-01')
         type_params:
           time_granularity: year
+        description: "Entry year of the cohort, expressed as a date (Sept 1 = start of academic year)"
+
+      - name: cohort_year
+        type: categorical
+        description: >
+          Calendar year the student cohort ENTERED the program (NOT graduation year).
+          Valid range: 2015-2024 (recent years excluded by maturity filter).
+          Example: cohort_year=2018 means students who started in 2018.
+
       - name: degtype
         type: categorical
+        description: >
+          Degree type. Valid values: BA, BS, BAR, BET (undergraduate);
+          MS, MBA, MAR (master's); PHD (doctoral); CRT (certificate).
+          Filter: WHERE degtype='MS' for Master of Science only.
+
       - name: u_g
         type: categorical
+        description: >
+          Student level. Valid values: U=Undergraduate, G=Graduate/Master's, D=Doctoral.
+          'Master's level' or 'graduate students' = u_g='G'.
+          'Undergrad' or 'undergraduate' = u_g='U'.
+          'PhD' or 'doctoral' = u_g='D'.
+
       - name: gender
         type: categorical
+        description: "Student gender. Valid values: Male, Female."
+
       - name: school
         type: categorical
+        description: >
+          Academic college/school code. Valid values and full names:
+          AD = Hillier College of Architecture and Design (HCAD),
+          CC = Ying Wu College of Computing (YWCC),
+          EN = Newark College of Engineering (NCE) -- use EN for 'College of Engineering',
+          SL = College of Science and Liberal Arts (CSLA),
+          SM = Martin Tuchman School of Management (MTSM).
+
       - name: pell
         type: categorical
+        description: >
+          Pell Grant eligibility. Valid values: Y=eligible (low-income), N=not eligible,
+          Unknown=data missing (~20% of records).
+          'Pell-eligible students' = pell='Y'.
+          Do NOT treat Unknown as N -- they are genuinely missing data.
 
     measures:
       - name: cohort_size
-        description: "Number of program episodes in the matured cohort group."
+        description: >
+          Number of program episodes (students) in this cohort group who started
+          in cohort_year. This is the DENOMINATOR for graduation rate.
+          A student who started both BS and PHD would count in each separately.
         agg: sum
         expr: cohort_size
+
       - name: graduated_count
-        description: "Number of episodes in the group that graduated."
+        description: >
+          Number of episodes in this cohort group that eventually graduated,
+          at any point in their academic career (not just in cohort_year).
+          This is the NUMERATOR for graduation rate.
         agg: sum
         expr: graduated_count
 
-  - name: retention_rate
+  # ─────────────────────────────────────────────────────────────────────────────
+  # COHORT-LEVEL RETENTION RATE
+  # Use for: 1-year and 2-year retention by entry cohort, first-year retention
+  # Answers: "What is the first-year retention rate for undergraduate Engineering students?"
+  # ─────────────────────────────────────────────────────────────────────────────
+  - name: retention_rate_cohort
     description: >
-      1-year and 2-year retention rate pre-aggregated across degtype, u_g,
-      gender, school, pell, and cohort_year (first-time cohorts at any
-      program level, matured cohorts only). Any combination of these
-      dimensions can be used to group/filter.
+      Cohort-based retention rate fact table, one row per (degtype, u_g, gender,
+      school, pell, cohort_year). COHORT LEVEL -- tracks what % of first-time
+      students returned 1 year and 2 years after entry.
+
+      ONLY FIRST-TIME STUDENTS are included (is_first_time_cohort=1 / regstat=1).
+      Transfer students, stop-outs, and continuing students are excluded.
+
+      MATURED COHORT FILTER IS PRE-APPLIED: 1-year needs cohort_term + 2yr of data,
+      2-year needs cohort_term + 4yr. Do NOT add WHERE for maturity.
+
+      EARLY COMPLETER EXCLUSION: students who graduated BEFORE the retention check
+      term are excluded from the denominator -- they are successes, not dropouts.
+
+      RATE CALCULATION:
+        1-year: SUM(one_year_retained_count) / SUM(one_year_eligible_cohort_size) * 100
+        2-year: SUM(two_year_retained_count) / SUM(two_year_eligible_cohort_size) * 100
+      Never AVG the rate columns directly.
+
+      X-AXIS FOR TREND CHARTS: cohort_year
     model: ref('fct_retention_rate_cohort')
     defaults:
       agg_time_dimension: cohort_start_date
@@ -63,39 +141,174 @@ semantic_models:
         expr: to_date(cast(cohort_year as varchar) || '-09-01')
         type_params:
           time_granularity: year
+
+      - name: cohort_year
+        type: categorical
+        description: >
+          Entry year of the first-time student cohort. Only first-time students
+          (regstat=1) are included. cohort_year=2015 means students who entered
+          for the first time in 2015.
+
       - name: degtype
         type: categorical
+        description: >
+          Degree type. Valid values: BA, BS, BAR, BET (undergraduate);
+          MS, MBA, MAR (master's); PHD (doctoral); CRT (certificate).
+
       - name: u_g
         type: categorical
+        description: >
+          Student level: U=Undergraduate, G=Graduate/Master's, D=Doctoral.
+          Retention covers all levels -- specify u_g='U' for undergraduate only.
+
       - name: gender
         type: categorical
+        description: "Student gender at cohort entry. Valid values: Male, Female."
+
       - name: school
         type: categorical
+        description: >
+          College at cohort entry. AD, CC, EN (Engineering), SL, SM.
+          'College of Engineering' = school='EN'.
+
       - name: pell
         type: categorical
+        description: >
+          Pell Grant eligibility at cohort entry. Y=eligible, N=not eligible,
+          Unknown=missing data.
 
     measures:
       - name: one_year_eligible_cohort_size
-        description: "Number of first-time episodes eligible for the 1-year retention check."
+        description: >
+          Number of first-time cohort episodes whose cohort_term has at least
+          2 years of data for the 1-year retention check. This is the DENOMINATOR
+          for 1-year retention rate. Excludes early completers.
         agg: sum
         expr: one_year_eligible_cohort_size
+
       - name: one_year_retained_count
-        description: "Number of cohort episodes retained one year later."
+        description: >
+          Number of first-time cohort episodes who were still enrolled 2 major
+          terms (approximately 1 year) after their cohort entry term.
+          This is the NUMERATOR for 1-year retention rate.
         agg: sum
         expr: one_year_retained_count
+
       - name: two_year_eligible_cohort_size
-        description: "Number of first-time episodes eligible for the 2-year retention check."
+        description: >
+          Number of first-time cohort episodes whose cohort_term has at least
+          4 years of data for the 2-year retention check. DENOMINATOR for 2-year rate.
+          Note: a cohort can appear in 1-year but not 2-year if not enough time has elapsed.
         agg: sum
         expr: two_year_eligible_cohort_size
+
       - name: two_year_retained_count
-        description: "Number of cohort episodes retained two years later."
+        description: >
+          Number of first-time cohort episodes still enrolled 4 major terms
+          (approximately 2 years) after cohort entry. NUMERATOR for 2-year retention.
         agg: sum
         expr: two_year_retained_count
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # TERM-OVER-TERM RETENTION RATE (ARR-style)
+  # Use for: semester-by-semester retention trend, attrition analysis
+  # Answers: "What was the retention rate in Fall 2023?" / "How has attrition changed?"
+  # ─────────────────────────────────────────────────────────────────────────────
+  - name: retention_rate_term
+    description: >
+      Term-over-term retention and attrition rate. One row per (current_term,
+      degtype, u_g, school). TERM LEVEL -- not cohort-based.
+
+      FORMULA (mirrors Round 1 ARR):
+        Adjusted Retention Rate = continuing_students / (prior_students - graduates_excluded) * 100
+        Attrition Rate = 100 - Adjusted Retention Rate
+
+      WHERE:
+        prior_students = enrolled in immediately preceding major term (Fall->Spring, Spring->Fall)
+        graduates_excluded = graduated between prior and current term (successful completers removed)
+        continuing_students = enrolled in BOTH prior AND current term
+
+      Gap term = New (not continuing). Summer/Winter excluded from major term sequencing.
+      X-AXIS FOR TREND CHARTS: current_term (format YYYYTT, e.g. 202490=Fall 2024)
+    model: ref('fct_retention_rate_term')
+    defaults:
+      agg_time_dimension: term_start_date
+
+    entities:
+      - name: term_retention_grouping
+        type: primary
+        expr: current_term || '-' || degtype || '-' || u_g || '-' || school
+
+    dimensions:
+      - name: term_start_date
+        type: time
+        expr: >-
+          to_date(
+            left(current_term, 4)
+            || case when right(current_term, 2) = '10' then '-01-01' else '-09-01' end
+          )
+        type_params:
+          time_granularity: month
+        description: "Start date of the current academic term derived from term_code"
+
+      - name: current_term
+        type: categorical
+        description: >
+          Term code in YYYYTT format. TT suffix: 10=Spring, 90=Fall.
+          Examples: 202490=Fall 2024, 202510=Spring 2025.
+          To filter Fall 2024: current_term='202490'.
+          Same season last year = current_term - 100.
+
+      - name: degtype
+        type: categorical
+        description: "Degree type (BA, BS, MS, MBA, PHD, CRT etc.)"
+
+      - name: u_g
+        type: categorical
+        description: "Student level: U=Undergraduate, G=Graduate/Master's, D=Doctoral."
+
+      - name: school
+        type: categorical
+        description: "College code: AD, CC, EN (Engineering), SL, SM."
+
+    measures:
+      - name: prior_students
+        description: "Students enrolled in the immediately preceding major term."
+        agg: sum
+        expr: prior_students
+
+      - name: graduates_excluded
+        description: "Students who graduated between prior and current term -- excluded from denominator."
+        agg: sum
+        expr: graduates_excluded
+
+      - name: eligible_prior_students
+        description: "prior_students minus graduates_excluded -- the correct denominator for ARR."
+        agg: sum
+        expr: eligible_prior_students
+
+      - name: continuing_students
+        description: "Students enrolled in BOTH prior term AND current term -- numerator for ARR."
+        agg: sum
+        expr: continuing_students
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # ENROLLMENT HEADCOUNT BY SEMESTER
+  # Use for: how many students enrolled, Pell enrollment, enrollment trends
+  # Answers: "What is the number of Pell students by semester in Master's programs?"
+  # ─────────────────────────────────────────────────────────────────────────────
   - name: enrollment_by_semester_level
     description: >
-      Student headcount by semester, program level, school, and Pell
-      eligibility. No u_g filter baked in -- dashboard controls the level.
+      Student headcount by semester, program level, school, and Pell eligibility.
+      One row per (term_code, u_g, school, pell). TERM SNAPSHOT -- counts distinct
+      students enrolled in each term, not longitudinal tracking.
+
+      NO u_g FILTER BAKED IN: the dashboard/chatbot controls which level to show.
+      For Master's Pell headcount (brief Q3): WHERE u_g='G' AND pell='Y'.
+
+      X-AXIS FOR TREND CHARTS: term_code
+      NOTE: student_count is a pre-aggregated distinct count.
+      Do NOT use COUNT(DISTINCT) -- just SUM(student_count) after filtering.
     model: ref('fct_enrollment_by_semester_level')
     defaults:
       agg_time_dimension: term_start_date
@@ -115,17 +328,44 @@ semantic_models:
           )
         type_params:
           time_granularity: month
+
       - name: term_code
         type: categorical
+        description: >
+          Academic term in YYYYTT format. TT: 10=Spring, 50=Summer, 90=Fall, 95=Winter.
+          Example: term_code='202490' = Fall 2024, term_code='202410' = Spring 2024.
+
+      - name: term_year
+        type: categorical
+        description: "Calendar year of the term (e.g. 2024). Numeric."
+
+      - name: term_season
+        type: categorical
+        description: "Season label. Valid values: Spring, Fall, Summer, Winter."
+
       - name: u_g
         type: categorical
+        description: >
+          Student level: U=Undergraduate, G=Graduate/Master's, D=Doctoral.
+          For 'Master's level programs': u_g='G'.
+          For 'undergrad enrollment': u_g='U'.
+
       - name: school
         type: categorical
+        description: >
+          College code: AD, CC, EN (Engineering/NCE), SL, SM.
+          'College of Engineering' = school='EN'.
+
       - name: pell
         type: categorical
+        description: >
+          Pell Grant eligibility: Y=eligible, N=not eligible, Unknown=missing.
+          'Pell Grant-eligible students' = pell='Y'.
 
     measures:
       - name: student_count
-        description: "Distinct student count for the term/level/school/Pell group."
+        description: >
+          Distinct students enrolled in this term/level/school/pell combination.
+          Already distinct -- just SUM(student_count) to aggregate, do NOT DISTINCT again.
         agg: sum
         expr: student_count

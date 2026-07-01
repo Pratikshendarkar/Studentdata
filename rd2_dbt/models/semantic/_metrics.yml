@@ -1,17 +1,36 @@
 version: 2
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# NJIT ANALYTICS METRICS CATALOG
+# This file defines all named metrics, their formulas, source tables, and
+# business context. Used by the AI chatbot to understand what each metric
+# means, how to compute it correctly, and which table to query.
+# ═══════════════════════════════════════════════════════════════════════════════
+
 metrics:
+
+  # ─── GRADUATION RATE METRICS ──────────────────────────────────────────────
+  # Source table: REPORT.fct_graduation_rate (COHORT level)
+  # Use when asked about: completion rates, graduation trends, Pell equity in graduation
+
   - name: cohort_size
     description: >
-      Number of program episodes in a matured cohort group (any
-      combination of degtype, u_g, gender, school, pell, cohort_year).
+      Total number of program episodes (students) in a cohort group who
+      entered in cohort_year. DENOMINATOR for graduation rate.
+      NOTE: one student with a BS then PHD counts separately in each episode.
+      SOURCE: REPORT.fct_graduation_rate, column: cohort_size.
+      AGGREGATE: SUM(cohort_size) -- never AVG or COUNT.
     type: simple
     label: "Cohort Size"
     type_params:
       measure: cohort_size
 
   - name: graduated_count
-    description: "Number of episodes in the cohort group that graduated."
+    description: >
+      Number of program episodes that eventually graduated at any point
+      after cohort entry. NUMERATOR for graduation rate.
+      SOURCE: REPORT.fct_graduation_rate, column: graduated_count.
+      AGGREGATE: SUM(graduated_count).
     type: simple
     label: "Graduated Count"
     type_params:
@@ -19,37 +38,62 @@ metrics:
 
   - name: graduation_rate
     description: >
-      Graduation rate (%) for a cohort group (any combination of degtype,
-      u_g, gender, school, pell, cohort_year), matured cohorts only.
+      Graduation rate (%) = SUM(graduated_count) / SUM(cohort_size) * 100.
+      Measures what % of students who STARTED in cohort_year eventually graduated.
+      MATURED COHORTS ONLY -- immature recent cohorts pre-excluded in source table.
+      SOURCE TABLE: REPORT.fct_graduation_rate (COHORT level, use cohort_year on X-axis).
+      NEVER average the pre-computed graduation_rate_pct column -- always re-derive
+      from numerator / denominator to get correct weighted rates.
+      RELATED METRIC: term_graduation_rate (measures graduation volume per semester).
     type: derived
-    label: "Graduation Rate"
+    label: "Graduation Rate %"
     type_params:
       expr: "graduated_count / nullif(cohort_size, 0) * 100"
       metrics:
         - name: graduated_count
         - name: cohort_size
 
+  # ─── COHORT RETENTION METRICS ─────────────────────────────────────────────
+  # Source table: REPORT.fct_retention_rate_cohort (COHORT level)
+  # Use when asked about: retention by entry year, first-year retention, 2-year retention
+  # ONLY covers first-time students (regstat=1 / is_first_time_cohort=1)
+
   - name: one_year_eligible_cohort_size
     description: >
-      Number of first-time episodes eligible for the 1-year retention
-      check, for a cohort group (any combination of degtype, u_g, gender,
-      school, pell, cohort_year).
+      Number of first-time cohort episodes eligible for the 1-year retention check.
+      DENOMINATOR for 1-year retention rate.
+      Excludes: immature cohorts (not enough time elapsed) AND early completers
+      (students who graduated before the 1-year check term).
+      SOURCE: REPORT.fct_retention_rate_cohort, column: one_year_eligible_cohort_size.
     type: simple
     label: "1-Year Eligible Cohort Size"
     type_params:
       measure: one_year_eligible_cohort_size
 
   - name: one_year_retained_count
-    description: "Number of cohort episodes retained one year later."
+    description: >
+      Number of first-time cohort episodes who were still enrolled approximately
+      1 year (2 major Fall/Spring terms) after their entry cohort_term.
+      NUMERATOR for 1-year retention rate.
+      SOURCE: REPORT.fct_retention_rate_cohort, column: one_year_retained_count.
     type: simple
     label: "1-Year Retained Count"
     type_params:
       measure: one_year_retained_count
 
   - name: first_year_retention_rate
-    description: "1-year retention rate (%) for a cohort group, matured cohorts only."
+    description: >
+      1-year retention rate (%) = SUM(one_year_retained_count) / SUM(one_year_eligible_cohort_size) * 100.
+      Measures what % of first-time students came back after year 1.
+      COHORT LEVEL -- use cohort_year on X-axis to see trend over entry years.
+      SOURCE TABLE: REPORT.fct_retention_rate_cohort.
+      FIRST-TIME STUDENTS ONLY -- transfer and continuing students excluded.
+      MATURED COHORTS ONLY -- recent cohorts without enough elapsed time are pre-excluded.
+      RELATED: second_year_retention_rate, adjusted_retention_rate (term-level).
+      EXAMPLE QUESTION: "What is the first-year retention rate for Engineering undergrads?"
+      SQL: WHERE u_g='U' AND school='EN' on fct_retention_rate_cohort.
     type: derived
-    label: "1-Year Retention Rate"
+    label: "1-Year Retention Rate %"
     type_params:
       expr: "one_year_retained_count / nullif(one_year_eligible_cohort_size, 0) * 100"
       metrics:
@@ -58,35 +102,90 @@ metrics:
 
   - name: two_year_eligible_cohort_size
     description: >
-      Number of first-time episodes eligible for the 2-year retention
-      check, for a cohort group (any combination of degtype, u_g, gender,
-      school, pell, cohort_year).
+      Number of first-time cohort episodes eligible for the 2-year retention check.
+      DENOMINATOR for 2-year retention rate.
+      A cohort can appear in 1-year but NOT 2-year if not enough time has elapsed
+      (need 4+ years of data vs 2+ years for 1-year check).
+      SOURCE: REPORT.fct_retention_rate_cohort, column: two_year_eligible_cohort_size.
     type: simple
     label: "2-Year Eligible Cohort Size"
     type_params:
       measure: two_year_eligible_cohort_size
 
   - name: two_year_retained_count
-    description: "Number of cohort episodes retained two years later."
+    description: >
+      Number of first-time cohort episodes still enrolled approximately 2 years
+      (4 major Fall/Spring terms) after their entry cohort_term.
+      NUMERATOR for 2-year retention rate.
+      SOURCE: REPORT.fct_retention_rate_cohort, column: two_year_retained_count.
     type: simple
     label: "2-Year Retained Count"
     type_params:
       measure: two_year_retained_count
 
   - name: second_year_retention_rate
-    description: "2-year retention rate (%) for a cohort group, matured cohorts only."
+    description: >
+      2-year retention rate (%) = SUM(two_year_retained_count) / SUM(two_year_eligible_cohort_size) * 100.
+      Measures what % of first-time students were still enrolled 2 years after entry.
+      Typically lower than 1-year retention (students drop out between year 1 and 2).
+      NOTE for Master's (G): a 2-yr MS student finishing in year 1 is excluded from
+      denominator (early completer, not dropout) -- this is intentional.
+      SOURCE TABLE: REPORT.fct_retention_rate_cohort.
     type: derived
-    label: "2-Year Retention Rate"
+    label: "2-Year Retention Rate %"
     type_params:
       expr: "two_year_retained_count / nullif(two_year_eligible_cohort_size, 0) * 100"
       metrics:
         - name: two_year_retained_count
         - name: two_year_eligible_cohort_size
 
+  # ─── TERM-LEVEL RETENTION METRICS (ARR-style) ─────────────────────────────
+  # Source table: REPORT.fct_retention_rate_term (TERM level)
+  # Use when asked about: retention this semester, Fall 2024 retention, attrition by term
+  # Formula: continuing / (prior - graduates) * 100
+
+  # ─── TERM-LEVEL RETENTION METRICS (ARR-style) ─────────────────────────────
+  # NOTE: fct_retention_rate_term does not have a MetricFlow semantic model
+  # (used directly via SQL in the chatbot). Documented here for reference.
+  #
+  # Adjusted Retention Rate (ARR) = continuing_students / eligible_prior_students * 100
+  # Attrition Rate = attrition_rate_pct column (= 100 - adjusted_retention_rate)
+  # Source table: REPORT.fct_retention_rate_term
+  # Key columns: current_term, prior_students, graduates_excluded,
+  #              eligible_prior_students, continuing_students,
+  #              adjusted_retention_rate, attrition_rate_pct
+  #
+  # EXAMPLE SQL for Fall 2024 retention:
+  #   SELECT SUM(continuing_students), SUM(eligible_prior_students),
+  #          ROUND(SUM(continuing_students)*100.0/NULLIF(SUM(eligible_prior_students),0),2)
+  #   FROM REPORT.fct_retention_rate_term WHERE current_term='202490';
+
+  # ─── TERM GRADUATION METRICS ──────────────────────────────────────────────
+  # NOTE: fct_graduation_rate_term and fct_retention_rate_term do not have
+  # MetricFlow semantic models defined (they are used directly via SQL in the
+  # chatbot). Their metrics are documented here for reference only.
+  #
+  # Term Graduation Rate = graduated_students / prior_students * 100
+  # (WHERE current_term = 'YYYYTT' on REPORT.fct_graduation_rate_term)
+  #
+  # Adjusted Retention Rate (term-level ARR) = continuing_students /
+  # eligible_prior_students * 100
+  # (WHERE current_term = 'YYYYTT' on REPORT.fct_retention_rate_term)
+  #
+  # Attrition Rate = attrition_rate_pct column in fct_retention_rate_term
+
+  # ─── ENROLLMENT METRICS ───────────────────────────────────────────────────
+  # Source table: REPORT.fct_enrollment_by_semester_level (TERM snapshot)
+  # Use when asked about: enrollment headcounts, Pell enrollment by semester
+
   - name: student_count
     description: >
-      Distinct student count by term, program level, school, and Pell
-      eligibility. Filter u_g='G' for Master's, u_g='U' for undergrad, etc.
+      Distinct students enrolled in a given (term_code, u_g, school, pell) combination.
+      Already distinct -- SUM(student_count) after filtering, do NOT use COUNT(DISTINCT).
+      SOURCE: REPORT.fct_enrollment_by_semester_level, column: student_count.
+      EXAMPLE QUESTION: "What is the number of Pell Grant-eligible students by semester
+      in Master's level programs?"
+      SQL: WHERE u_g='G' AND pell='Y', GROUP BY term_code, SUM(student_count).
     type: simple
     label: "Student Count"
     type_params:
