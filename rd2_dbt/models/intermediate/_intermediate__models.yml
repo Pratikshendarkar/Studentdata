@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: int_program_episodes
+    description: >
+      One row per program episode (student_id, u_g, degtype). Sole place
+      episode grain, cohort attributes, and forward-term retention are
+      resolved -- downstream marts ref() this table rather than
+      recomputing episode boundaries themselves.
+    columns:
+      - name: program_episode_id
+        data_tests:
+          - not_null
+          - unique
+      - name: student_id
+        data_tests:
+          - not_null
+      - name: cohort_term
+        data_tests:
+          - not_null
+      - name: is_first_time_cohort
+        data_tests:
+          - accepted_values:
+              values: [0, 1]
+      - name: graduated_flag
+        data_tests:
+          - accepted_values:
+              values: [0, 1]
+      - name: retained_one_year
+        data_tests:
+          - accepted_values:
+              values: [0, 1]
+      - name: retained_two_year
+        data_tests:
+          - accepted_values:
+              values: [0, 1]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - student_id
+            - u_g
+            - degtype

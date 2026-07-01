@@ -1,0 +1,93 @@
+version: 2
+
+metrics:
+  - name: cohort_size
+    description: >
+      Number of program episodes in a matured cohort group (any
+      combination of degtype, u_g, gender, school, pell, cohort_year).
+    type: simple
+    label: "Cohort Size"
+    type_params:
+      measure: cohort_size
+
+  - name: graduated_count
+    description: "Number of episodes in the cohort group that graduated."
+    type: simple
+    label: "Graduated Count"
+    type_params:
+      measure: graduated_count
+
+  - name: graduation_rate
+    description: >
+      Graduation rate (%) for a cohort group (any combination of degtype,
+      u_g, gender, school, pell, cohort_year), matured cohorts only.
+    type: derived
+    label: "Graduation Rate"
+    type_params:
+      expr: "graduated_count / nullif(cohort_size, 0) * 100"
+      metrics:
+        - name: graduated_count
+        - name: cohort_size
+
+  - name: one_year_eligible_cohort_size
+    description: >
+      Number of first-time episodes eligible for the 1-year retention
+      check, for a cohort group (any combination of degtype, u_g, gender,
+      school, pell, cohort_year).
+    type: simple
+    label: "1-Year Eligible Cohort Size"
+    type_params:
+      measure: one_year_eligible_cohort_size
+
+  - name: one_year_retained_count
+    description: "Number of cohort episodes retained one year later."
+    type: simple
+    label: "1-Year Retained Count"
+    type_params:
+      measure: one_year_retained_count
+
+  - name: first_year_retention_rate
+    description: "1-year retention rate (%) for a cohort group, matured cohorts only."
+    type: derived
+    label: "1-Year Retention Rate"
+    type_params:
+      expr: "one_year_retained_count / nullif(one_year_eligible_cohort_size, 0) * 100"
+      metrics:
+        - name: one_year_retained_count
+        - name: one_year_eligible_cohort_size
+
+  - name: two_year_eligible_cohort_size
+    description: >
+      Number of first-time episodes eligible for the 2-year retention
+      check, for a cohort group (any combination of degtype, u_g, gender,
+      school, pell, cohort_year).
+    type: simple
+    label: "2-Year Eligible Cohort Size"
+    type_params:
+      measure: two_year_eligible_cohort_size
+
+  - name: two_year_retained_count
+    description: "Number of cohort episodes retained two years later."
+    type: simple
+    label: "2-Year Retained Count"
+    type_params:
+      measure: two_year_retained_count
+
+  - name: second_year_retention_rate
+    description: "2-year retention rate (%) for a cohort group, matured cohorts only."
+    type: derived
+    label: "2-Year Retention Rate"
+    type_params:
+      expr: "two_year_retained_count / nullif(two_year_eligible_cohort_size, 0) * 100"
+      metrics:
+        - name: two_year_retained_count
+        - name: two_year_eligible_cohort_size
+
+  - name: student_count
+    description: >
+      Distinct student count by term, program level, school, and Pell
+      eligibility. Filter u_g='G' for Master's, u_g='U' for undergrad, etc.
+    type: simple
+    label: "Student Count"
+    type_params:
+      measure: student_count

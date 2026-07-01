@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: stg_student_enrollment
+    description: "Cleaned, typed, decoded student enrollment records. Grain: (student_id, u_g, degtype, term_code)."
+    columns:
+      - name: student_id
+        data_tests:
+          - not_null
+      - name: u_g
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['U', 'G', 'D']
+      - name: school
+        data_tests:
+          - accepted_values:
+              values: ['AD', 'CC', 'EN', 'SL', 'SM']
+      - name: term_code
+        data_tests:
+          - not_null
+      - name: pell
+        data_tests:
+          - accepted_values:
+              values: ['Y', 'N', 'Unknown']
+      - name: firstgen
+        data_tests:
+          - accepted_values:
+              values: ['Y', 'N', 'Unknown']
+      - name: academic_state
+        data_tests:
+          - accepted_values:
+              values: ['Enrolled', 'Graduated', 'Maintaining Registration']
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - student_id
+            - u_g
+            - degtype
+            - term_code
+
+  - name: stg_term_calendar
+    description: "Major terms (Fall/Spring) mapped to their immediately following major term."
+    columns:
+      - name: current_term
+        data_tests:
+          - not_null
+          - unique
+      - name: next_major_term
+        data_tests:
+          - not_null

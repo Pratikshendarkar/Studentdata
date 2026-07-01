@@ -1,0 +1,5 @@
+regstat_code,regstat_description
+1,First-time
+2,Transfer
+3,Stop-out / Readmit
+4,Continuing

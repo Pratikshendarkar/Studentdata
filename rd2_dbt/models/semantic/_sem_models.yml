@@ -1,0 +1,131 @@
+version: 2
+
+semantic_models:
+  - name: graduation_rate
+    description: >
+      Graduation rate pre-aggregated across degtype, u_g, gender, school,
+      pell, and cohort_year (matured cohorts only). Any combination of
+      these dimensions can be used to group/filter.
+    model: ref('fct_graduation_rate')
+    defaults:
+      agg_time_dimension: cohort_start_date
+
+    entities:
+      - name: graduation_rate_grouping
+        type: primary
+        expr: degtype || '-' || u_g || '-' || gender || '-' || school || '-' || pell || '-' || cast(cohort_year as varchar)
+
+    dimensions:
+      - name: cohort_start_date
+        type: time
+        expr: to_date(cast(cohort_year as varchar) || '-09-01')
+        type_params:
+          time_granularity: year
+      - name: degtype
+        type: categorical
+      - name: u_g
+        type: categorical
+      - name: gender
+        type: categorical
+      - name: school
+        type: categorical
+      - name: pell
+        type: categorical
+
+    measures:
+      - name: cohort_size
+        description: "Number of program episodes in the matured cohort group."
+        agg: sum
+        expr: cohort_size
+      - name: graduated_count
+        description: "Number of episodes in the group that graduated."
+        agg: sum
+        expr: graduated_count
+
+  - name: retention_rate
+    description: >
+      1-year and 2-year retention rate pre-aggregated across degtype, u_g,
+      gender, school, pell, and cohort_year (first-time cohorts at any
+      program level, matured cohorts only). Any combination of these
+      dimensions can be used to group/filter.
+    model: ref('fct_cohort_retention_rate')
+    defaults:
+      agg_time_dimension: cohort_start_date
+
+    entities:
+      - name: retention_rate_grouping
+        type: primary
+        expr: degtype || '-' || u_g || '-' || gender || '-' || school || '-' || pell || '-' || cast(cohort_year as varchar)
+
+    dimensions:
+      - name: cohort_start_date
+        type: time
+        expr: to_date(cast(cohort_year as varchar) || '-09-01')
+        type_params:
+          time_granularity: year
+      - name: degtype
+        type: categorical
+      - name: u_g
+        type: categorical
+      - name: gender
+        type: categorical
+      - name: school
+        type: categorical
+      - name: pell
+        type: categorical
+
+    measures:
+      - name: one_year_eligible_cohort_size
+        description: "Number of first-time episodes eligible for the 1-year retention check."
+        agg: sum
+        expr: one_year_eligible_cohort_size
+      - name: one_year_retained_count
+        description: "Number of cohort episodes retained one year later."
+        agg: sum
+        expr: one_year_retained_count
+      - name: two_year_eligible_cohort_size
+        description: "Number of first-time episodes eligible for the 2-year retention check."
+        agg: sum
+        expr: two_year_eligible_cohort_size
+      - name: two_year_retained_count
+        description: "Number of cohort episodes retained two years later."
+        agg: sum
+        expr: two_year_retained_count
+
+  - name: enrollment_by_semester_level
+    description: >
+      Student headcount by semester, program level, school, and Pell
+      eligibility. No u_g filter baked in -- dashboard controls the level.
+    model: ref('fct_enrollment_by_semester_level')
+    defaults:
+      agg_time_dimension: term_start_date
+
+    entities:
+      - name: term_level_grouping
+        type: primary
+        expr: term_code || '-' || u_g || '-' || school || '-' || pell
+
+    dimensions:
+      - name: term_start_date
+        type: time
+        expr: >-
+          to_date(
+            cast(term_year as varchar)
+            || case when term_season = 'Spring' then '-01-01' else '-09-01' end
+          )
+        type_params:
+          time_granularity: month
+      - name: term_code
+        type: categorical
+      - name: u_g
+        type: categorical
+      - name: school
+        type: categorical
+      - name: pell
+        type: categorical
+
+    measures:
+      - name: student_count
+        description: "Distinct student count for the term/level/school/Pell group."
+        agg: sum
+        expr: student_count

@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: landing
+    database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+    schema: LND
+    tables:
+      - name: student_enrollment
+        columns:
+          - name: student_id
+          - name: u_g
+          - name: gender
+          - name: school
+          - name: degtype
+          - name: firstgen
+          - name: pell
+          - name: ethnicmultirace
+          - name: citizen
+          - name: creditenr
+          - name: year_field
+          - name: semester
+          - name: academic_state
+          - name: regstat
+          - name: accumgpa
+          - name: term_code

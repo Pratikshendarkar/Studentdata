@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+rd2_dbt/target/
+rd2_dbt/dbt_packages/
+rd2_dbt/logs/
+.dbt/
+*.log
+logs/
+*.user.yml

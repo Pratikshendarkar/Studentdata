@@ -1,0 +1,28 @@
+name: 'rd2_dbt'
+version: '1.0.0'
+config-version: 2
+
+profile: 'rd2_dbt'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  rd2_dbt:
+    +schema: LND
+
+models:
+  rd2_dbt:
+    landing_to_staging:
+      +schema: STG
+      +materialized: table
+    intermediate:
+      +schema: STG
+      +materialized: table
+    staging_to_analytics:
+      +schema: REPORT
+      +materialized: table

@@ -1,0 +1,167 @@
+version: 2
+
+models:
+  - name: fct_term_retention_rate
+    description: >
+      Term-over-term retention and attrition rate, one row per
+      (current_term, degtype, u_g, school). Mirrors the Round 1 ARR
+      formula: Adjusted_Retention_Rate = Continuing / (Prior - Graduates)
+      x 100. Use current_term on X-axis in Power BI for a term trend line.
+      Complements fct_cohort_retention_rate (cohort-based, entry year
+      checkpoints) which answers "of students who started in 2015, what %
+      came back?"
+    columns:
+      - name: current_term
+        data_tests:
+          - not_null
+      - name: adjusted_retention_rate
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+      - name: attrition_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - current_term
+            - degtype
+            - u_g
+            - school
+
+  - name: dim_program_episode
+    description: >
+      Descriptive dimension: one row per program episode with cohort
+      attributes (who, what, when). Metric flags like retained_one_year,
+      retained_two_year, and graduated_flag are intentionally excluded --
+      they carry implicit denominator logic that belongs in fct_cohort_retention_rate
+      and fct_graduation_rate, not in a dimension table where a BI tool
+      might SUM them without the correct exclusions. Use this table for
+      filtering and slicing only, not for computing rates directly.
+    columns:
+      - name: program_episode_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: fct_enrollment_term
+    description: "One row per program episode per term -- base fact for headcount and filter-driven dashboard queries."
+    columns:
+      - name: student_id
+        data_tests:
+          - not_null
+      - name: term_code
+        data_tests:
+          - not_null
+
+  - name: fct_cohort_retention_rate
+    description: >
+      1-year and 2-year retention rates, pre-aggregated across degtype,
+      u_g, gender, school, pell, and cohort_year -- one row per unique
+      combination of those six dimensions, for first-time cohorts at any
+      program level (U/G/D). Both metrics read retained_one_year /
+      retained_two_year from int_program_episodes; neither is recomputed
+      here. Separate matured-cohort filters are baked in: 1-year needs
+      cohort_term + 2 years of data; 2-year needs cohort_term + 4 years of
+      data. Early completers (e.g. a 2-yr MS finishing in year 1) are
+      excluded from each metric's denominator via
+      graduated_before_one_year_mark / graduated_before_two_year_mark.
+    columns:
+      - name: u_g
+        data_tests:
+          - accepted_values:
+              values: ['U', 'G', 'D']
+      - name: pell
+        data_tests:
+          - accepted_values:
+              values: ['Y', 'N', 'Unknown']
+      - name: first_year_retention_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+      - name: second_year_retention_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - degtype
+            - u_g
+            - gender
+            - school
+            - pell
+            - cohort_year
+
+  - name: fct_graduation_rate
+    description: >
+      Graduation rate pre-aggregated across degtype, u_g, gender, school,
+      pell, and cohort_year -- one row per unique combination of those six
+      dimensions, with cohort_size/graduated_count/graduation_rate_pct
+      computed directly. A BI tool can filter/group on any subset of these
+      dimensions. Matured-cohort filter is baked into this model (see SQL
+      header) -- immature cohorts are excluded here, not at query time.
+    columns:
+      - name: u_g
+        data_tests:
+          - accepted_values:
+              values: ['U', 'G', 'D']
+      - name: pell
+        data_tests:
+          - accepted_values:
+              values: ['Y', 'N', 'Unknown']
+      - name: graduation_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - degtype
+            - u_g
+            - gender
+            - school
+            - pell
+            - cohort_year
+      - dbt_utils.expression_is_true:
+          name: fct_graduation_rate_excludes_immature_cohorts
+          expression: >
+            cohort_year <= (select max(cohort_year) from {{ ref('int_program_episodes') }}) - 2
+
+  - name: fct_enrollment_by_semester_level
+    description: >
+      Student headcount by semester, program level (u_g), school, and
+      Pell eligibility -- one row per (term_code, u_g, school, pell).
+      No u_g filter baked in; the dashboard controls which level to show.
+      Answers the brief's Pell/Master's headcount question (filter u_g='G')
+      and generalizes to undergrad or doctoral without a new model.
+    columns:
+      - name: term_code
+        data_tests:
+          - not_null
+      - name: u_g
+        data_tests:
+          - accepted_values:
+              values: ['U', 'G', 'D']
+      - name: pell
+        data_tests:
+          - accepted_values:
+              values: ['Y', 'N', 'Unknown']
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - term_code
+            - u_g
+            - school
+            - pell
