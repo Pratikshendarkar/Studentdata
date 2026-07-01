@@ -20,11 +20,14 @@ CREATE OR REPLACE VIEW REPORT.vw_fct_enrollment_by_semester_level AS
 CREATE OR REPLACE VIEW REPORT.vw_fct_graduation_rate AS
     SELECT * FROM REPORT.fct_graduation_rate;
 
-CREATE OR REPLACE VIEW REPORT.vw_fct_cohort_retention_rate AS
-    SELECT * FROM REPORT.fct_cohort_retention_rate;
+CREATE OR REPLACE VIEW REPORT.vw_fct_retention_rate_cohort AS
+    SELECT * FROM REPORT.fct_retention_rate_cohort;
 
-CREATE OR REPLACE VIEW REPORT.vw_fct_term_retention_rate AS
-    SELECT * FROM REPORT.fct_term_retention_rate;
+CREATE OR REPLACE VIEW REPORT.vw_fct_graduation_rate_term AS
+    SELECT * FROM REPORT.fct_graduation_rate_term;
+
+CREATE OR REPLACE VIEW REPORT.vw_fct_retention_rate_term AS
+    SELECT * FROM REPORT.fct_retention_rate_term;
 
 CREATE OR REPLACE VIEW REPORT.vw_stg_student_enrollment AS
     SELECT * FROM STG.stg_student_enrollment;

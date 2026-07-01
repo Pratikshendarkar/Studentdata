@@ -1,13 +1,40 @@
 version: 2
 
 models:
-  - name: fct_term_retention_rate
+  - name: fct_graduation_rate_term
+    description: >
+      Term-over-term graduation rate, one row per (current_term, degtype,
+      u_g, gender, school, pell). Formula: graduates between prior_term
+      and current_term / prior term students x 100. Complements
+      fct_retention_rate_term (same grain) by answering "what % of last
+      term's students completed their degree by this term?"
+    columns:
+      - name: current_term
+        data_tests:
+          - not_null
+      - name: term_graduation_rate_pct
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - current_term
+            - degtype
+            - u_g
+            - gender
+            - school
+            - pell
+
+  - name: fct_retention_rate_term
     description: >
       Term-over-term retention and attrition rate, one row per
       (current_term, degtype, u_g, school). Mirrors the Round 1 ARR
       formula: Adjusted_Retention_Rate = Continuing / (Prior - Graduates)
       x 100. Use current_term on X-axis in Power BI for a term trend line.
-      Complements fct_cohort_retention_rate (cohort-based, entry year
+      Complements fct_retention_rate_cohort (cohort-based, entry year
       checkpoints) which answers "of students who started in 2015, what %
       came back?"
     columns:
@@ -39,7 +66,7 @@ models:
       Descriptive dimension: one row per program episode with cohort
       attributes (who, what, when). Metric flags like retained_one_year,
       retained_two_year, and graduated_flag are intentionally excluded --
-      they carry implicit denominator logic that belongs in fct_cohort_retention_rate
+      they carry implicit denominator logic that belongs in fct_retention_rate_cohort
       and fct_graduation_rate, not in a dimension table where a BI tool
       might SUM them without the correct exclusions. Use this table for
       filtering and slicing only, not for computing rates directly.
@@ -59,7 +86,7 @@ models:
         data_tests:
           - not_null
 
-  - name: fct_cohort_retention_rate
+  - name: fct_retention_rate_cohort
     description: >
       1-year and 2-year retention rates, pre-aggregated across degtype,
       u_g, gender, school, pell, and cohort_year -- one row per unique

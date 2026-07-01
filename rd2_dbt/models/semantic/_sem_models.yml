@@ -48,7 +48,7 @@ semantic_models:
       gender, school, pell, and cohort_year (first-time cohorts at any
       program level, matured cohorts only). Any combination of these
       dimensions can be used to group/filter.
-    model: ref('fct_cohort_retention_rate')
+    model: ref('fct_retention_rate_cohort')
     defaults:
       agg_time_dimension: cohort_start_date
 
