@@ -139,40 +139,110 @@ metrics:
         - name: two_year_retained_count
         - name: two_year_eligible_cohort_size
 
+  # ─── GRADUATION RATE DERIVED METRICS ──────────────────────────────────────
+
+  - name: non_graduation_rate
+    description: >
+      Non-graduation (dropout/non-completion) rate (%) = 100 - graduation_rate.
+      = (cohort_size - graduated_count) / cohort_size * 100.
+      What % of a cohort did NOT graduate.
+      SOURCE TABLE: REPORT.fct_graduation_rate.
+      SQL: ROUND(100.0*(SUM(cohort_size)-SUM(graduated_count))/NULLIF(SUM(cohort_size),0),2)
+      EXAMPLE QUESTION: "What % of students did not graduate?" / "dropout rate"
+    type: derived
+    label: "Non-Graduation Rate %"
+    type_params:
+      expr: "(cohort_size - graduated_count) / nullif(cohort_size, 0) * 100"
+      metrics:
+        - name: cohort_size
+        - name: graduated_count
+
+  - name: students_not_graduated
+    description: >
+      Number of students in cohort who did NOT graduate = cohort_size - graduated_count.
+      SOURCE TABLE: REPORT.fct_graduation_rate.
+      SQL: SUM(cohort_size) - SUM(graduated_count)
+      EXAMPLE QUESTION: "How many students dropped out?" / "how many didn't complete?"
+    type: derived
+    label: "Students Not Graduated"
+    type_params:
+      expr: "cohort_size - graduated_count"
+      metrics:
+        - name: cohort_size
+        - name: graduated_count
+
+  - name: pell_graduation_gap
+    description: >
+      Equity gap = Non-Pell graduation rate minus Pell graduation rate.
+      Positive = non-Pell students graduate at higher rate (equity gap exists).
+      Zero or negative = no gap (Pell students perform equally or better).
+      SOURCE TABLE: REPORT.fct_graduation_rate, compare pell='Y' vs pell='N' rows.
+      SQL: compute graduation_rate separately for pell='Y' and pell='N', subtract.
+      EXAMPLE QUESTION: "What is the Pell equity gap?" / "Do Pell students graduate at lower rates?"
+    type: derived
+    label: "Pell Graduation Gap %"
+    type_params:
+      expr: "graduated_count / nullif(cohort_size, 0) * 100"
+      metrics:
+        - name: graduated_count
+        - name: cohort_size
+
   # ─── TERM-LEVEL RETENTION METRICS (ARR-style) ─────────────────────────────
   # Source table: REPORT.fct_retention_rate_term (TERM level)
-  # Use when asked about: retention this semester, Fall 2024 retention, attrition by term
-  # Formula: continuing / (prior - graduates) * 100
+  # NOTE: These are SQL-only metrics (no MetricFlow semantic model for this table).
+  # The chatbot generates direct SQL against REPORT.fct_retention_rate_term.
 
-  # ─── TERM-LEVEL RETENTION METRICS (ARR-style) ─────────────────────────────
-  # NOTE: fct_retention_rate_term does not have a MetricFlow semantic model
-  # (used directly via SQL in the chatbot). Documented here for reference.
-  #
-  # Adjusted Retention Rate (ARR) = continuing_students / eligible_prior_students * 100
-  # Attrition Rate = attrition_rate_pct column (= 100 - adjusted_retention_rate)
-  # Source table: REPORT.fct_retention_rate_term
-  # Key columns: current_term, prior_students, graduates_excluded,
-  #              eligible_prior_students, continuing_students,
-  #              adjusted_retention_rate, attrition_rate_pct
-  #
-  # EXAMPLE SQL for Fall 2024 retention:
-  #   SELECT SUM(continuing_students), SUM(eligible_prior_students),
-  #          ROUND(SUM(continuing_students)*100.0/NULLIF(SUM(eligible_prior_students),0),2)
-  #   FROM REPORT.fct_retention_rate_term WHERE current_term='202490';
+  # adjusted_retention_rate (ARR)
+  # Formula: SUM(continuing_students) / NULLIF(SUM(eligible_prior_students),0) * 100
+  # Column: adjusted_retention_rate (pre-computed in table)
+  # Use when asked: "retention rate in Fall 2024", "term-over-term retention", "ARR"
+  # SQL: SELECT SUM(adjusted_retention_rate * eligible_prior_students) /
+  #             NULLIF(SUM(eligible_prior_students),0)
+  #      FROM REPORT.fct_retention_rate_term WHERE current_term='202490'
+  # OR:  SELECT SUM(continuing_students)*100.0/NULLIF(SUM(eligible_prior_students),0)
+  #      FROM REPORT.fct_retention_rate_term WHERE current_term='202490'
+
+  # attrition_rate
+  # Formula: 100 - adjusted_retention_rate
+  # Column: attrition_rate_pct (pre-computed in table)
+  # Use when asked: "attrition rate", "how many students left", "dropout rate by term"
+  # SQL: SELECT SUM(eligible_prior_students - continuing_students)*100.0 /
+  #             NULLIF(SUM(eligible_prior_students),0)
+  #      FROM REPORT.fct_retention_rate_term WHERE current_term='202490'
+
+  # prior_students (term-level)
+  # Students enrolled in immediately preceding major term.
+  # Column: prior_students in REPORT.fct_retention_rate_term
+
+  # continuing_students
+  # Students enrolled in BOTH prior term AND current term.
+  # Column: continuing_students in REPORT.fct_retention_rate_term
+
+  # graduates_excluded
+  # Students who graduated between prior and current term (excluded from denominator).
+  # Column: graduates_excluded in REPORT.fct_retention_rate_term
+
+  # eligible_prior_students
+  # prior_students - graduates_excluded. Correct ARR denominator.
+  # Column: eligible_prior_students in REPORT.fct_retention_rate_term
 
   # ─── TERM GRADUATION METRICS ──────────────────────────────────────────────
-  # NOTE: fct_graduation_rate_term and fct_retention_rate_term do not have
-  # MetricFlow semantic models defined (they are used directly via SQL in the
-  # chatbot). Their metrics are documented here for reference only.
-  #
-  # Term Graduation Rate = graduated_students / prior_students * 100
-  # (WHERE current_term = 'YYYYTT' on REPORT.fct_graduation_rate_term)
-  #
-  # Adjusted Retention Rate (term-level ARR) = continuing_students /
-  # eligible_prior_students * 100
-  # (WHERE current_term = 'YYYYTT' on REPORT.fct_retention_rate_term)
-  #
-  # Attrition Rate = attrition_rate_pct column in fct_retention_rate_term
+  # Source table: REPORT.fct_graduation_rate_term (TERM level)
+  # NOTE: SQL-only metrics (no MetricFlow semantic model for this table).
+
+  # term_graduation_rate
+  # Formula: SUM(graduated_students) / NULLIF(SUM(prior_students),0) * 100
+  # Column: term_graduation_rate_pct (pre-computed in table)
+  # Use when asked: "how many graduated this semester", "graduation rate in Spring 2024"
+  # SQL: SELECT SUM(graduated_students), SUM(prior_students),
+  #             ROUND(SUM(graduated_students)*100.0/NULLIF(SUM(prior_students),0),2)
+  #      FROM REPORT.fct_graduation_rate_term WHERE current_term='202410'
+  # NOTE: Spring always higher than Fall (most degrees finish in Spring)
+
+  # term_graduated_students (count)
+  # Students who graduated between prior term and current term.
+  # Column: graduated_students in REPORT.fct_graduation_rate_term
+  # Use when asked: "how many students graduated in Fall 2023?"
 
   # ─── ENROLLMENT METRICS ───────────────────────────────────────────────────
   # Source table: REPORT.fct_enrollment_by_semester_level (TERM snapshot)
@@ -190,3 +260,101 @@ metrics:
     label: "Student Count"
     type_params:
       measure: student_count
+
+  - name: pell_student_count
+    description: >
+      Pell-eligible students enrolled (pell='Y') for a given term/level/school.
+      SOURCE: REPORT.fct_enrollment_by_semester_level WHERE pell='Y'.
+      SQL: SELECT term_code, SUM(student_count) FROM REPORT.fct_enrollment_by_semester_level
+           WHERE pell='Y' GROUP BY term_code
+      EXAMPLE QUESTION: "How many Pell students are enrolled?" / "Pell enrollment trend"
+    type: derived
+    label: "Pell Student Count"
+    type_params:
+      expr: "student_count"
+      metrics:
+        - name: student_count
+
+  - name: pell_enrollment_rate
+    description: >
+      Pell enrollment rate (%) = Pell-enrolled / Total enrolled * 100.
+      What % of enrolled students are Pell-eligible.
+      SOURCE: REPORT.fct_enrollment_by_semester_level.
+      SQL: ROUND(SUM(CASE WHEN pell='Y' THEN student_count ELSE 0 END)*100.0/
+                 NULLIF(SUM(student_count),0),2)
+           FROM REPORT.fct_enrollment_by_semester_level
+      EXAMPLE QUESTION: "What percentage of students are Pell-eligible?"
+    type: derived
+    label: "Pell Enrollment Rate %"
+    type_params:
+      expr: "student_count"
+      metrics:
+        - name: student_count
+
+  # ─── ENROLLMENT TERM METRICS (student-level longitudinal) ─────────────────
+  # Source table: REPORT.fct_enrollment_term (STUDENT LEVEL)
+  # NOTE: SQL-only metrics (no MetricFlow semantic model for this table).
+  # Use for: GPA analysis, credit hours, full-time/part-time split, demographics
+
+  # avg_gpa
+  # Formula: AVG(accumgpa)
+  # Column: accumgpa in REPORT.fct_enrollment_term
+  # Use when asked: "average GPA", "GPA by school", "GPA for Pell students"
+  # SQL: SELECT ROUND(AVG(accumgpa),2) FROM REPORT.fct_enrollment_term
+  #      WHERE school='EN' AND pell='Y' AND term_code='202490'
+  # NOTE: accumgpa is cumulative GPA at the START of each term
+
+  # avg_credits
+  # Formula: AVG(creditenr)
+  # Column: creditenr in REPORT.fct_enrollment_term
+  # Use when asked: "average credit load", "how many credits", "full-time vs part-time"
+  # SQL: SELECT ROUND(AVG(creditenr),1) FROM REPORT.fct_enrollment_term
+  #      WHERE u_g='U' AND term_code='202490'
+
+  # full_time_students (12+ credits)
+  # Formula: COUNT(DISTINCT student_id) WHERE creditenr >= 12
+  # Use when asked: "full-time students", "full-time enrollment"
+  # SQL: SELECT COUNT(DISTINCT student_id) FROM REPORT.fct_enrollment_term
+  #      WHERE creditenr >= 12 AND term_code='202490'
+
+  # part_time_students (<12 credits)
+  # Formula: COUNT(DISTINCT student_id) WHERE creditenr < 12
+  # SQL: SELECT COUNT(DISTINCT student_id) FROM REPORT.fct_enrollment_term
+  #      WHERE creditenr < 12 AND term_code='202490'
+
+  # full_time_rate
+  # Formula: full_time_students / total_students * 100
+  # SQL: SELECT ROUND(COUNT(DISTINCT CASE WHEN creditenr>=12 THEN student_id END)*100.0/
+  #             NULLIF(COUNT(DISTINCT student_id),0),2)
+  #      FROM REPORT.fct_enrollment_term WHERE term_code='202490'
+
+  # firstgen_enrollment_count
+  # Students with firstgen='Y' enrolled in a given term.
+  # Column: firstgen in REPORT.fct_enrollment_term
+  # Use when asked: "first-generation students", "firstgen enrollment"
+  # SQL: SELECT COUNT(DISTINCT student_id) FROM REPORT.fct_enrollment_term
+  #      WHERE firstgen='Y' AND term_code='202490'
+
+  # total_unique_students_ever
+  # Total distinct students ever enrolled across all terms.
+  # SQL: SELECT COUNT(DISTINCT student_id) FROM REPORT.fct_enrollment_term
+
+  # ─── DIM_PROGRAM_EPISODE METRICS ──────────────────────────────────────────
+  # Source table: REPORT.dim_program_episode
+  # NOTE: SQL-only metrics (no MetricFlow semantic model).
+
+  # new_program_starts
+  # Students who started a new program episode in a given cohort_year.
+  # Column: cohort_year, is_first_time_cohort in REPORT.dim_program_episode
+  # Use when asked: "how many students started a PhD in 2020", "new enrollees"
+  # SQL: SELECT COUNT(*) FROM REPORT.dim_program_episode
+  #      WHERE cohort_year=2020 AND u_g='D' AND is_first_time_cohort=1
+
+  # first_time_student_count
+  # First-time students only (is_first_time_cohort=1).
+  # SQL: SELECT COUNT(*) FROM REPORT.dim_program_episode
+  #      WHERE is_first_time_cohort=1 AND cohort_year=2020
+
+  # total_program_episodes
+  # Total distinct program enrollments (one student in BS then PHD = 2 episodes).
+  # SQL: SELECT COUNT(*) FROM REPORT.dim_program_episode
