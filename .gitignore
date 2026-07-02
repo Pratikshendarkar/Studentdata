@@ -3,10 +3,17 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+*.log
+logs/
+
+# rd2_pipeline
 rd2_dbt/target/
 rd2_dbt/dbt_packages/
 rd2_dbt/logs/
 .dbt/
-*.log
-logs/
 *.user.yml
+
+# Snowflake_ChatBot
+docs/*.pdf
+docs/*.docx
+chroma_db/
