@@ -1,5 +1,5 @@
 """
-Text-to-SQL using Google Gemini (gemini-3.5-flash) via google-genai SDK.
+Text-to-SQL using Google Gemini (gemini-3.1-flash-lite) via google-genai SDK.
 
 Flow:
   1. Build system prompt with full schema context
@@ -23,7 +23,7 @@ from .conversation import ConversationHistory
 load_dotenv()
 
 _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-3.5-flash"
+MODEL = "gemini-3.1-flash-lite"
 
 _SQL_SYSTEM_ADDENDUM = """
 ## YOUR TASK

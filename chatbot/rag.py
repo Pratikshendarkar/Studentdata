@@ -1,5 +1,5 @@
 """
-RAG module using google-genai SDK (Gemini gemini-3.5-flash).
+RAG module using google-genai SDK (Gemini gemini-3.1-flash-lite).
 Loads PDF/text docs, embeds with sentence-transformers, stores in ChromaDB.
 """
 
@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _client    = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL      = "gemini-3.5-flash"
+MODEL      = "gemini-3.1-flash-lite"
 DOCS_DIR   = Path(__file__).parent.parent / "docs"
 CHROMA_DIR = Path(__file__).parent.parent / "chroma_db"
 
