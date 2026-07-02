@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+outputs/model_*.pkl
+randomdata_annotated.csv

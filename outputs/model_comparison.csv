@@ -1,0 +1,5 @@
+Model,CV AUC (mean),CV AUC (std),Test AUC
+Random Forest,0.5943,0.0051,0.6178
+LightGBM,0.5886,0.0051,0.6139
+XGBoost,0.5856,0.006,0.6115
+Logistic Regression,0.57,0.0011,0.5773
