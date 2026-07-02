@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+docs/*.pdf
+docs/*.docx
+chroma_db/
+*.log
