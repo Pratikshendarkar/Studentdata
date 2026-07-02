@@ -1,6 +1,11 @@
+.env
 __pycache__/
 *.pyc
 .venv/
 venv/
-outputs/model_*.pkl
+outputs/*.pkl
 randomdata_annotated.csv
+mlflow.db
+mlruns/
+mlartifacts/
+~$*.xlsx

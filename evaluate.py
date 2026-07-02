@@ -8,6 +8,7 @@ Outputs:
   outputs/shap_summary.png  (if model supports SHAP)
 """
 
+import os
 import joblib
 import numpy as np
 import pandas as pd
@@ -15,6 +16,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import seaborn as sns
 from pathlib import Path
+from dotenv import load_dotenv
 from sklearn.metrics import (
     roc_auc_score, roc_curve,
     confusion_matrix, ConfusionMatrixDisplay,
@@ -22,7 +24,9 @@ from sklearn.metrics import (
 
 matplotlib.use("Agg")  # non-interactive backend
 
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+load_dotenv(Path(__file__).parent / ".env")
+
+OUTPUT_DIR = Path(__file__).parent / os.getenv("OUTPUT_DIR", "outputs")
 
 
 def load_artifacts():

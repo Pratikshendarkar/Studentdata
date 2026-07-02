@@ -1,5 +1,8 @@
-Model,CV AUC (mean),CV AUC (std),Test AUC
-Random Forest,0.5943,0.0051,0.6178
-LightGBM,0.5886,0.0051,0.6139
-XGBoost,0.5856,0.006,0.6115
-Logistic Regression,0.57,0.0011,0.5773
+Model,CV PR-AUC,CV Std,Test AUC,PR-AUC,Optimal Threshold,Precision (at-risk),Recall (at-risk),F1 (at-risk)
+Random Forest (tuned),0.1368,-,0.6103,0.1399,0.4708,0.1347,0.7976,0.2305
+XGBoost (tuned),0.1375,-,0.6107,0.1396,0.57,0.1352,0.7969,0.2312
+LightGBM (tuned),0.136,-,0.6105,0.1394,0.6906,0.1358,0.789,0.2317
+LightGBM (baseline),0.1305,0.0018,0.601,0.1359,0.4508,0.1336,0.7696,0.2277
+XGBoost (baseline),0.1305,0.0015,0.6001,0.1349,0.4682,0.1342,0.7275,0.2266
+Logistic Regression,0.1274,0.0022,0.5729,0.1271,0.4886,0.1269,0.7838,0.2184
+Random Forest (baseline),0.1188,0.001,0.5693,0.1252,0.0663,0.1221,0.7849,0.2113

@@ -12,10 +12,12 @@ All models use class_weight='balanced' or equivalent.
 Best model saved to outputs/best_model.pkl.
 """
 
+import os
 import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from dotenv import load_dotenv
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
@@ -25,9 +27,11 @@ from sklearn.metrics import roc_auc_score, classification_report
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 
-OUTPUT_DIR   = Path(__file__).parent / "outputs"
-RANDOM_STATE = 42
-CV_FOLDS     = 5
+load_dotenv(Path(__file__).parent / ".env")
+
+OUTPUT_DIR   = Path(__file__).parent / os.getenv("OUTPUT_DIR", "outputs")
+RANDOM_STATE = int(os.getenv("RANDOM_STATE", 42))
+CV_FOLDS     = int(os.getenv("CV_FOLDS", 5))
 
 
 def load_data():

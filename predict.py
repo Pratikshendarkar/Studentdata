@@ -7,12 +7,16 @@ Usage:
 Or import and call predict_student() from another script.
 """
 
+import os
 import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from dotenv import load_dotenv
 
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+load_dotenv(Path(__file__).parent / ".env")
+
+OUTPUT_DIR = Path(__file__).parent / os.getenv("OUTPUT_DIR", "outputs")
 
 
 def load_model():

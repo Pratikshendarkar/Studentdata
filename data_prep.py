@@ -20,19 +20,23 @@ Output: outputs/X_train.pkl, outputs/X_test.pkl,
         outputs/feature_names.pkl
 """
 
+import os
 import pandas as pd
 import numpy as np
 import joblib
 from pathlib import Path
+from dotenv import load_dotenv
 from sklearn.preprocessing import LabelEncoder
 
-DATA_PATH    = Path(__file__).parent / "randomdata_annotated.csv"
-OUTPUT_DIR   = Path(__file__).parent / "outputs"
+load_dotenv(Path(__file__).parent / ".env")
+
+DATA_PATH    = Path(__file__).parent / os.getenv("DATA_PATH", "randomdata_annotated.csv")
+OUTPUT_DIR   = Path(__file__).parent / os.getenv("OUTPUT_DIR", "outputs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Train on terms before 2023, test on 2023+ (last ~2 years held out)
-CUTOFF_YEAR  = 2023
-RANDOM_STATE = 42
+# Train on terms before CUTOFF_YEAR, test on CUTOFF_YEAR+ (last ~2 years held out)
+CUTOFF_YEAR  = int(os.getenv("CUTOFF_YEAR", 2023))
+RANDOM_STATE = int(os.getenv("RANDOM_STATE", 42))
 
 
 def load_and_clean(path: Path) -> pd.DataFrame:
