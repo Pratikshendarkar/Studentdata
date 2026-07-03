@@ -21,6 +21,16 @@
 --   U (undergrad): 4 years   G (master's): 2 years   D (doctoral): 5 years
 -- expressed in term-code arithmetic (each year = 100 in YYYYTT terms, e.g.
 -- 202010 -> 202410 is 4 years later).
+--
+-- FIRST-TIME COHORT FILTER (is_first_time_cohort = 1): 2015 is the earliest
+-- year in the source data, so int_program_episodes' cohort_term = min(term_code)
+-- wrongly assigns 2015 as the "entry year" for students who were actually
+-- already continuing/transfer/readmit before the data window began (left
+-- censoring). Without this filter, cohort_year=2015 is inflated by ~9,600
+-- such episodes and its graduation_rate_pct is a false outlier (58.8% vs.
+-- ~44-47% in neighboring years). Restricting to true first-time entrants
+-- (regstat_code='1' at cohort term) fixes this and matches the same
+-- restriction already used in fct_retention_rate_cohort.
 
 with data_bounds as (
 
@@ -39,6 +49,7 @@ maturity_windows as (
             when 'D' then 500
         end as maturity_window_terms
     from {{ ref('int_program_episodes') }} pe
+    where pe.is_first_time_cohort = 1
 
 ),
 
