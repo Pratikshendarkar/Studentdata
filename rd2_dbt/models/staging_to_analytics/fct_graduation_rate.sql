@@ -73,7 +73,8 @@ select
     sum(graduated_flag) as graduated_count,
     round(100.0 * sum(graduated_flag) / nullif(count(*), 0), 4) as graduation_rate_pct,
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from matured_episodes
 group by degtype, u_g, cohort_gender, cohort_school, cohort_pell, cohort_year
 order by degtype, u_g, gender, school, pell, cohort_year

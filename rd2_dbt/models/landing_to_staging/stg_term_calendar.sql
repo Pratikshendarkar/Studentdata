@@ -11,6 +11,7 @@ select distinct
     term_code as current_term,
     {{ next_major_term('term_code') }} as next_major_term,
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from {{ ref('stg_student_enrollment') }}
 where right(term_code, 2) in ('10', '90')

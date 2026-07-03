@@ -105,7 +105,8 @@ select
         4
     )                                                               as term_graduation_rate_pct,
     current_timestamp()                                             as loaded_at,
-    current_timestamp()                                             as updated_at
+    current_timestamp()                                             as updated_at,
+    current_user()                                                  as updated_by
 from prior_population pp
 left join graduates g
     on  g.current_term = pp.current_term

@@ -24,7 +24,8 @@ select
     pe.cohort_term,
     pe.is_first_time_cohort,
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from {{ ref('stg_student_enrollment') }} e
 join {{ ref('int_program_episodes') }} pe
     on pe.student_id = e.student_id

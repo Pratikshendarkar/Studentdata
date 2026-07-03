@@ -115,7 +115,8 @@ select
     )                                                                                as second_year_retention_rate_pct,
 
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from episodes
 group by degtype, u_g, cohort_gender, cohort_school, cohort_pell, cohort_year
 order by degtype, u_g, gender, school, pell, cohort_year

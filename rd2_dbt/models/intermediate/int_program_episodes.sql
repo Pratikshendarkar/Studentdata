@@ -202,7 +202,8 @@ select
     rl.graduated_before_one_year_mark,
     rl.graduated_before_two_year_mark,
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from episode_bounds_keyed eb
 join retention_lookup rl
     on rl.program_episode_id = eb.program_episode_id

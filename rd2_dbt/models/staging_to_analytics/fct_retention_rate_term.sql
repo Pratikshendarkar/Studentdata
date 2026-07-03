@@ -139,7 +139,8 @@ select
         4
     )                                                               as attrition_rate_pct,
     current_timestamp()                                             as loaded_at,
-    current_timestamp()                                             as updated_at
+    current_timestamp()                                             as updated_at,
+    current_user()                                                  as updated_by
 from eligible_prior ep
 left join continuing c
     on  c.current_term = ep.current_term

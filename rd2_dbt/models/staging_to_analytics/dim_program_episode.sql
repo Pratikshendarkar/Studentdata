@@ -25,5 +25,6 @@ select
     last_term,
     is_first_time_cohort,
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from {{ ref('int_program_episodes') }}

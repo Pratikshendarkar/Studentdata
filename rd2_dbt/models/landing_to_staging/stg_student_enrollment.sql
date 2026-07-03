@@ -40,7 +40,8 @@ select
     {{ term_year('term_code') }} as term_year,
     {{ term_season('term_code') }} as term_season,
     current_timestamp() as loaded_at,
-    current_timestamp() as updated_at
+    current_timestamp() as updated_at,
+    current_user()      as updated_by
 from source s
 left join {{ ref('seed_school_codes') }} sc
     on s.school = sc.school_code
