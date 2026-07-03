@@ -77,7 +77,13 @@ models:
           - unique
 
   - name: fct_enrollment_term
-    description: "One row per program episode per term -- base fact for headcount and filter-driven dashboard queries."
+    description: >
+      One row per program episode per term -- base fact for headcount and
+      filter-driven dashboard queries (e.g. "Pell-eligible students by
+      semester"). Replaces fct_enrollment_by_semester_level: aggregate
+      headcounts (SUM/COUNT(DISTINCT student_id)) should be computed from
+      this table at query time instead of reading a pre-aggregated
+      student_count column, since this table carries student_id directly.
     columns:
       - name: student_id
         data_tests:
@@ -85,6 +91,19 @@ models:
       - name: term_code
         data_tests:
           - not_null
+      - name: u_g
+        data_tests:
+          - accepted_values:
+              values: ['U', 'G', 'D']
+      - name: pell
+        data_tests:
+          - accepted_values:
+              values: ['Y', 'N', 'Unknown']
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - program_episode_id
+            - term_code
 
   - name: fct_retention_rate_cohort
     description: >
@@ -165,30 +184,3 @@ models:
           name: fct_graduation_rate_excludes_immature_cohorts
           expression: >
             cohort_year <= (select max(cohort_year) from {{ ref('int_program_episodes') }}) - 2
-
-  - name: fct_enrollment_by_semester_level
-    description: >
-      Student headcount by semester, program level (u_g), school, and
-      Pell eligibility -- one row per (term_code, u_g, school, pell).
-      No u_g filter baked in; the dashboard controls which level to show.
-      Answers the brief's Pell/Master's headcount question (filter u_g='G')
-      and generalizes to undergrad or doctoral without a new model.
-    columns:
-      - name: term_code
-        data_tests:
-          - not_null
-      - name: u_g
-        data_tests:
-          - accepted_values:
-              values: ['U', 'G', 'D']
-      - name: pell
-        data_tests:
-          - accepted_values:
-              values: ['Y', 'N', 'Unknown']
-    data_tests:
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - term_code
-            - u_g
-            - school
-            - pell

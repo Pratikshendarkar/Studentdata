@@ -53,8 +53,8 @@ SELECT
     term_code,
     term_year,
     term_season,
-    SUM(student_count) AS pell_eligible_masters_students
-FROM REPORT.fct_enrollment_by_semester_level
+    COUNT(DISTINCT student_id) AS pell_eligible_masters_students
+FROM REPORT.fct_enrollment_term
 WHERE u_g = 'G'
   AND pell = 'Y'
 GROUP BY term_code, term_year, term_season
@@ -113,8 +113,8 @@ SELECT
     term_code,
     term_season,
     term_year,
-    SUM(student_count) AS total_enrolled
-FROM REPORT.fct_enrollment_by_semester_level
+    COUNT(DISTINCT student_id) AS total_enrolled
+FROM REPORT.fct_enrollment_term
 WHERE school = 'EN'
 GROUP BY term_code, term_season, term_year
 ORDER BY term_code;

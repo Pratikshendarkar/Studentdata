@@ -29,8 +29,14 @@
 -- not-retained. No explicit exclusion is needed.
 --
 -- MATURED-COHORT FILTERS ARE BAKED IN HERE for both metrics:
---   1-year retention: cohort needs 2 years of data elapsed (cohort_term + 200)
---   2-year retention: cohort needs 4 years of data elapsed (cohort_term + 400)
+--   1-year retention: cohort needs 1 year of data elapsed (cohort_term + 100)
+--   2-year retention: cohort needs 2 years of data elapsed (cohort_term + 200)
+-- term_code is YYYYTT, and next_major_term alternates Fall<->Spring, so one
+-- full year later in the SAME season is cohort_term + 100 (e.g. Fall 2020
+-- 202090 -> Fall 2021 202190 = +100; Spring 2020 202010 -> Spring 2021
+-- 202110 = +100) -- not +200, which is actually 2 years later. This mirrors
+-- the 2-hop/4-hop next_major_term chaining already used correctly in
+-- int_program_episodes.retention_lookup (2 major-term hops = 1 year).
 -- Both cutoffs computed dynamically off MAX(cohort_term) in the data so
 -- they stay correct as new terms land. Without these, recent cohorts show
 -- false near-0% rates purely because their check term hasn't occurred yet.
@@ -49,11 +55,11 @@ episodes as (
     select
         pe.*,
         case
-            when cast(pe.cohort_term as integer) + 200 <= cast(d.max_term_in_data as integer)
+            when cast(pe.cohort_term as integer) + 100 <= cast(d.max_term_in_data as integer)
             then 1 else 0
         end as is_mature_for_one_year,
         case
-            when cast(pe.cohort_term as integer) + 400 <= cast(d.max_term_in_data as integer)
+            when cast(pe.cohort_term as integer) + 200 <= cast(d.max_term_in_data as integer)
             then 1 else 0
         end as is_mature_for_two_year
     from {{ ref('int_program_episodes') }} pe

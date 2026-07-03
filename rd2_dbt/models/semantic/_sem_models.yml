@@ -300,23 +300,27 @@ semantic_models:
   - name: enrollment_by_semester_level
     description: >
       Student headcount by semester, program level, school, and Pell eligibility.
-      One row per (term_code, u_g, school, pell). TERM SNAPSHOT -- counts distinct
-      students enrolled in each term, not longitudinal tracking.
+      One row per (program_episode_id, term_code) -- episode-per-term grain, not
+      pre-aggregated. Replaces the old fct_enrollment_by_semester_level model:
+      student_count is now computed as COUNT(DISTINCT student_id) at query time
+      (see the student_count measure below), since this table carries student_id
+      directly rather than a pre-aggregated count column.
 
       NO u_g FILTER BAKED IN: the dashboard/chatbot controls which level to show.
       For Master's Pell headcount (brief Q3): WHERE u_g='G' AND pell='Y'.
 
       X-AXIS FOR TREND CHARTS: term_code
-      NOTE: student_count is a pre-aggregated distinct count.
-      Do NOT use COUNT(DISTINCT) -- just SUM(student_count) after filtering.
-    model: ref('fct_enrollment_by_semester_level')
+      NOTE: student_count now uses COUNT(DISTINCT student_id) -- this table has
+      one row per program episode per term, so a plain COUNT(*) or COUNT(student_id)
+      would overcount students enrolled in multiple programs in the same term.
+    model: ref('fct_enrollment_term')
     defaults:
       agg_time_dimension: term_start_date
 
     entities:
-      - name: term_level_grouping
+      - name: program_episode_term
         type: primary
-        expr: term_code || '-' || u_g || '-' || school || '-' || pell
+        expr: program_episode_id || '-' || term_code
 
     dimensions:
       - name: term_start_date
@@ -366,6 +370,8 @@ semantic_models:
       - name: student_count
         description: >
           Distinct students enrolled in this term/level/school/pell combination.
-          Already distinct -- just SUM(student_count) to aggregate, do NOT DISTINCT again.
-        agg: sum
-        expr: student_count
+          Computed as COUNT(DISTINCT student_id) -- do not use COUNT(*) or
+          COUNT(student_id), since a student can have multiple program
+          episodes (and therefore multiple rows) in the same term.
+        agg: count_distinct
+        expr: student_id

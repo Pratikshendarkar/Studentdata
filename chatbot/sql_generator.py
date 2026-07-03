@@ -36,8 +36,12 @@ When the user asks a data question:
 Rules for SQL generation:
 - Query ONLY tables in the REPORT schema (REPORT.fct_graduation_rate,
   REPORT.fct_retention_rate_cohort, REPORT.fct_retention_rate_term,
-  REPORT.fct_graduation_rate_term, REPORT.fct_enrollment_by_semester_level,
-  REPORT.fct_enrollment_term, REPORT.dim_program_episode)
+  REPORT.fct_graduation_rate_term, REPORT.fct_enrollment_term,
+  REPORT.dim_program_episode)
+- For enrollment headcounts, use COUNT(DISTINCT student_id) on
+  REPORT.fct_enrollment_term, not COUNT(*) or COUNT(student_id) --
+  it has one row per program episode per term, so a student with
+  multiple programs in the same term has multiple rows
 - Only SELECT statements — no INSERT, UPDATE, DELETE, DROP, CREATE
 - Never AVG(graduation_rate_pct) or AVG(first_year_retention_rate_pct)
   always SUM numerator / SUM denominator * 100

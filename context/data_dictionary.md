@@ -211,10 +211,12 @@ Term Graduation Rate % = (graduated_students / prior_students) × 100
 
 ### Enrollment Headcount
 ```
-Total Enrolled = SUM(student_count) from fct_enrollment_by_semester_level
+Total Enrolled = COUNT(DISTINCT student_id) from fct_enrollment_term
 ```
-- One row per (term_code, u_g, school, pell)
-- Source table: REPORT.fct_enrollment_by_semester_level
+- One row per (program_episode_id, term_code); a student with multiple
+  program episodes in the same term has multiple rows, so always use
+  COUNT(DISTINCT student_id), never COUNT(*) or COUNT(student_id)
+- Source table: REPORT.fct_enrollment_term
 
 ---
 
@@ -257,24 +259,19 @@ Total Enrolled = SUM(student_count) from fct_enrollment_by_semester_level
 - "How many students graduated in Spring 2024?"
 - "What percentage of students graduated in Fall 2023?"
 
-### 5. REPORT.fct_enrollment_by_semester_level (TERM LEVEL)
-**Use when asked about:** enrollment headcounts by term, Pell-eligible enrollment, how many students enrolled
-**Grain:** one row per (term_code, u_g, school, pell)
-**Key columns:** term_code, term_year, term_season, u_g, school, pell, student_count
+### 5. REPORT.fct_enrollment_term (STUDENT-LEVEL LONGITUDINAL / TERM SNAPSHOT)
+**Use when asked about:** enrollment headcounts by term, Pell-eligible enrollment, how many students enrolled, individual student details, GPA analysis, credit hours, full-time vs part-time
+**Grain:** one row per program episode per term (a student with two concurrent programs has two rows in the same term)
+**Key columns:** student_id, program_episode_id, term_code, term_year, term_season, school, pell, creditenr, accumgpa, academic_state, u_g, degtype
+**For headcounts:** use COUNT(DISTINCT student_id), never COUNT(*) or COUNT(student_id)
 **Example questions:**
 - "What is the number of Pell Grant-eligible students by semester in Master's level programs?"
 - "How has enrollment in the College of Engineering changed over time?"
 - "How many female students were enrolled in Fall 2023?"
-
-### 6. REPORT.fct_enrollment_term (STUDENT-LEVEL LONGITUDINAL)
-**Use when asked about:** individual student details, GPA analysis, credit hours, full-time vs part-time
-**Grain:** one row per student per term enrolled
-**Key columns:** student_id, term_code, school, pell, creditenr, accumgpa, academic_state, u_g, degtype
-**Example questions:**
 - "What is the average GPA for Pell-eligible students?"
 - "What is the average credit load for Engineering undergrads?"
 
-### 7. REPORT.dim_program_episode (DIMENSION)
+### 6. REPORT.dim_program_episode (DIMENSION)
 **Use when asked about:** student episode attributes, cohort membership, program details
 **Grain:** one row per program episode (student_id, u_g, degtype)
 **Key columns:** program_episode_id, student_id, u_g, degtype, cohort_term, cohort_year, school, pell, gender, firstgen, is_first_time_cohort
@@ -292,8 +289,8 @@ Total Enrolled = SUM(student_count) from fct_enrollment_by_semester_level
 | Retention rate by COHORT year | fct_retention_rate_cohort |
 | Retention rate by TERM/SEMESTER | fct_retention_rate_term |
 | Attrition rate | fct_retention_rate_term |
-| Enrollment headcount by term | fct_enrollment_by_semester_level |
-| Pell enrollment by semester | fct_enrollment_by_semester_level |
+| Enrollment headcount by term | fct_enrollment_term (COUNT DISTINCT student_id) |
+| Pell enrollment by semester | fct_enrollment_term (COUNT DISTINCT student_id) |
 | Average GPA / credit hours | fct_enrollment_term |
 | Student demographics / cohort attributes | dim_program_episode |
 

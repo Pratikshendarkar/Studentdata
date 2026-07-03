@@ -245,17 +245,19 @@ metrics:
   # Use when asked: "how many students graduated in Fall 2023?"
 
   # ─── ENROLLMENT METRICS ───────────────────────────────────────────────────
-  # Source table: REPORT.fct_enrollment_by_semester_level (TERM snapshot)
+  # Source table: REPORT.fct_enrollment_term (episode-per-term grain)
   # Use when asked about: enrollment headcounts, Pell enrollment by semester
 
   - name: student_count
     description: >
       Distinct students enrolled in a given (term_code, u_g, school, pell) combination.
-      Already distinct -- SUM(student_count) after filtering, do NOT use COUNT(DISTINCT).
-      SOURCE: REPORT.fct_enrollment_by_semester_level, column: student_count.
+      Computed as COUNT(DISTINCT student_id) -- fct_enrollment_term has one row per
+      program episode per term, so a student with multiple programs in the same
+      term has multiple rows; COUNT(DISTINCT student_id) avoids overcounting them.
+      SOURCE: REPORT.fct_enrollment_term, column: student_id.
       EXAMPLE QUESTION: "What is the number of Pell Grant-eligible students by semester
       in Master's level programs?"
-      SQL: WHERE u_g='G' AND pell='Y', GROUP BY term_code, SUM(student_count).
+      SQL: WHERE u_g='G' AND pell='Y', GROUP BY term_code, COUNT(DISTINCT student_id).
     type: simple
     label: "Student Count"
     type_params:
@@ -264,8 +266,8 @@ metrics:
   - name: pell_student_count
     description: >
       Pell-eligible students enrolled (pell='Y') for a given term/level/school.
-      SOURCE: REPORT.fct_enrollment_by_semester_level WHERE pell='Y'.
-      SQL: SELECT term_code, SUM(student_count) FROM REPORT.fct_enrollment_by_semester_level
+      SOURCE: REPORT.fct_enrollment_term WHERE pell='Y'.
+      SQL: SELECT term_code, COUNT(DISTINCT student_id) FROM REPORT.fct_enrollment_term
            WHERE pell='Y' GROUP BY term_code
       EXAMPLE QUESTION: "How many Pell students are enrolled?" / "Pell enrollment trend"
     type: derived
@@ -279,10 +281,10 @@ metrics:
     description: >
       Pell enrollment rate (%) = Pell-enrolled / Total enrolled * 100.
       What % of enrolled students are Pell-eligible.
-      SOURCE: REPORT.fct_enrollment_by_semester_level.
-      SQL: ROUND(SUM(CASE WHEN pell='Y' THEN student_count ELSE 0 END)*100.0/
-                 NULLIF(SUM(student_count),0),2)
-           FROM REPORT.fct_enrollment_by_semester_level
+      SOURCE: REPORT.fct_enrollment_term.
+      SQL: ROUND(COUNT(DISTINCT CASE WHEN pell='Y' THEN student_id END)*100.0/
+                 NULLIF(COUNT(DISTINCT student_id),0),2)
+           FROM REPORT.fct_enrollment_term
       EXAMPLE QUESTION: "What percentage of students are Pell-eligible?"
     type: derived
     label: "Pell Enrollment Rate %"

@@ -50,16 +50,17 @@ Use for: "how many graduated this semester", "graduation volume by term"
 Key columns: current_term, degtype, u_g, gender, school, pell,
              prior_students, graduated_students, term_graduation_rate_pct
 
-### REPORT.fct_enrollment_by_semester_level — TERM SNAPSHOT
-One row per (term_code, u_g, school, pell).
-Use for: "enrollment headcount", "Pell students by semester", "how many enrolled"
-Key columns: term_code, term_year, term_season, u_g, school, pell, student_count
-
-### REPORT.fct_enrollment_term — STUDENT LONGITUDINAL
-One row per student per term enrolled. Most granular table.
-Use for: "average GPA", "credit hours", "full-time vs part-time", student-level detail
-Key columns: student_id, term_code, school, pell, u_g, degtype,
-             creditenr, accumgpa, academic_state, gender, firstgen
+### REPORT.fct_enrollment_term — STUDENT LONGITUDINAL / TERM SNAPSHOT
+One row per program episode per term (a student with two concurrent
+programs has two rows in the same term). Most granular table.
+Use for: "enrollment headcount", "Pell students by semester", "how many enrolled",
+"average GPA", "credit hours", "full-time vs part-time", student-level detail
+Key columns: student_id, program_episode_id, term_code, term_year, term_season,
+             school, pell, u_g, degtype, creditenr, accumgpa, academic_state,
+             gender, firstgen
+For headcounts, use COUNT(DISTINCT student_id) grouped by term_code/u_g/school/pell
+-- do NOT use COUNT(*) or COUNT(student_id), which would overcount students
+with multiple program episodes in the same term.
 
 ### REPORT.dim_program_episode — DIMENSION
 One row per program episode (student_id, u_g, degtype).
@@ -113,8 +114,9 @@ NO "Withdrawn" state — absence of records = attrition
 4. Matured cohort filter ALREADY in fct_graduation_rate and fct_retention_rate_cohort
    Do NOT add WHERE cohort_year < 2023 or similar — it is pre-handled
 
-5. fct_enrollment_by_semester_level has pre-aggregated student_count
-   Use SUM(student_count) — do NOT COUNT(DISTINCT student_id)
+5. fct_enrollment_term has one row per program episode per term (not one
+   row per student per term) -- for headcounts, use COUNT(DISTINCT student_id),
+   never COUNT(*) or COUNT(student_id)
 
 6. cohort_year is the ENTRY year — "2015 cohort" = started in 2015, may have graduated in 2019
 
@@ -126,7 +128,7 @@ NO "Withdrawn" state — absence of records = attrition
 "first-year retention" → fct_retention_rate_cohort
 "retention this semester" or "Fall 20XX retention" → fct_retention_rate_term
 "attrition" → fct_retention_rate_term (attrition_rate_pct column)
-"Pell enrollment by semester" → fct_enrollment_by_semester_level WHERE pell='Y'
+"Pell enrollment by semester" → fct_enrollment_term WHERE pell='Y', COUNT(DISTINCT student_id)
 "average GPA" or "credit hours" → fct_enrollment_term
 "how many students started" → dim_program_episode
 
