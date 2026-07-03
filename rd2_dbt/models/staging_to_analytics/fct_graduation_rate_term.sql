@@ -40,15 +40,11 @@ enrollment as (
         e.term_code,
         e.u_g,
         e.degtype,
-        pe.cohort_gender    as gender,
+        e.gender,
         e.school,
         e.pell,
         e.academic_state
     from {{ ref('stg_student_enrollment') }} e
-    join {{ ref('int_program_episodes') }} pe
-        on  pe.student_id = e.student_id
-        and pe.u_g        = e.u_g
-        and pe.degtype    = e.degtype
     where right(e.term_code, 2) in ('10', '90')
 
 ),
