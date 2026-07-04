@@ -68,6 +68,19 @@ Use for: "how many students started", cohort membership, program attributes
 Key columns: program_episode_id, student_id, u_g, degtype, cohort_term, cohort_year,
              school, pell, gender, firstgen, is_first_time_cohort
 
+### REPORT.PREDICTION_MODEL — ML DROPOUT PREDICTIONS (single-term snapshot)
+One row per student, most recent scored term only (not longitudinal like
+fct_enrollment_term). Use for: "dropout risk", "at-risk students",
+"prediction", "risk score", "which students are likely to drop out".
+Key columns: student_id, u_g, school, degtype, firstgen, pell, gender,
+             academic_state, regstat, accumgpa, creditenr, term_code, term_year,
+             term_type, semester, dropout_probability, risk_flag
+NOTE: term_code here is NUMBER, not VARCHAR like the fct_*/dim_* tables --
+do NOT quote it (WHERE term_code = 202610, not term_code = '202610').
+risk_flag is 'YES'/'NO'/NULL (NULL = student already graduated, not scored).
+dropout_probability is NULL for the same graduated rows. Filter
+WHERE risk_flag IS NOT NULL to restrict to actually-scored students.
+
 ## COLUMN CODE MAPPINGS
 
 ### u_g (student level)
@@ -109,7 +122,8 @@ NO "Withdrawn" state — absence of records = attrition
    u_g='G' for Master's (NOT u_g='Graduate')
    pell='Y' for Pell-eligible (NOT pell='Pell')
 
-3. term_code is VARCHAR — use quotes: current_term='202490' (NOT 202490)
+3. term_code is VARCHAR in fct_*/dim_* tables — use quotes: current_term='202490' (NOT 202490)
+   term_code is NUMBER in REPORT.PREDICTION_MODEL — do NOT quote it there: term_code = 202610
 
 4. Matured cohort filter ALREADY in fct_graduation_rate and fct_retention_rate_cohort
    Do NOT add WHERE cohort_year < 2023 or similar — it is pre-handled
@@ -123,6 +137,18 @@ NO "Withdrawn" state — absence of records = attrition
 7. term_code - 100 = same season, prior year (YYYYTT arithmetic)
    202490 - 100 = 202390 = Fall 2023
 
+8. "Highest/lowest/best/worst <rate>" questions using ORDER BY ... LIMIT 1:
+   a computed rate (SUM(numerator)/NULLIF(SUM(denominator),0)) is NULL when
+   the denominator is 0, and NULL sorts FIRST even with ORDER BY ... DESC in
+   Snowflake -- an ineligible/immature cohort with a NULL rate can wrongly
+   win the LIMIT 1. Always filter out zero/NULL denominators first, e.g.
+   WHERE one_year_eligible_cohort_size > 0, before ORDER BY ... LIMIT.
+
+9. DATA GOVERNANCE: student_id must NEVER be returned as a bare column --
+   only inside an aggregate function (COUNT, AVG, SUM, MIN, MAX). A query
+   that selects raw student_id values (e.g. "list student IDs") is blocked
+   before execution. Write aggregate queries instead.
+
 ## QUESTION ROUTING GUIDE
 "graduation rate" → fct_graduation_rate (cohort) or fct_graduation_rate_term (term)
 "first-year retention" → fct_retention_rate_cohort
@@ -131,6 +157,7 @@ NO "Withdrawn" state — absence of records = attrition
 "Pell enrollment by semester" → fct_enrollment_term WHERE pell='Y', COUNT(DISTINCT student_id)
 "average GPA" or "credit hours" → fct_enrollment_term
 "how many students started" → dim_program_episode
+"dropout risk" or "at-risk students" or "prediction" → PREDICTION_MODEL WHERE risk_flag IS NOT NULL
 
 ## RESPONSE FORMAT
 1. Answer the question in 1-3 clear sentences

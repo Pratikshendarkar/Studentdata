@@ -20,9 +20,16 @@ _SQL_KEYWORDS = [
     "semester", "term", "fall", "spring", "2015", "2016", "2017",
     "2018", "2019", "2020", "2021", "2022", "2023", "2024",
     "gpa", "credits", "full-time", "part-time", "firstgen",
-    "first generation", "female", "male", "gender", "degree",
+    "first generation", "first-gen", "female", "male", "gender", "degree",
     "completed", "dropped", "trend", "average", "percentage", "rate",
     "count", "total", "compare", "which school", "highest", "lowest",
+    "arr", "adjusted retention", "dropout", "at risk", "risk score",
+    "prediction", "stop out", "stopout", "readmit",
+    "continuing students", "prior students",
+    "pell gap", "equity gap",
+    "term over term", "term-over-term",
+    "cohort year", "matured cohort",
+    "two year", "2-year", "one year", "1-year",
 ]
 
 # Keywords that suggest a document/RAG question

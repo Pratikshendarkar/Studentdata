@@ -74,7 +74,7 @@ if "messages_display" not in st.session_state:
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.image("https://www.njit.edu/sites/all/themes/njit_theme/images/njit_logo_white.png",
+    st.image("njit_logo_0-removebg-preview.png",
              width=160, use_container_width=False)
     st.markdown("## NJIT Analytics Assistant")
     st.markdown("Ask questions about student enrollment, graduation rates, and retention.")
@@ -107,7 +107,7 @@ with st.sidebar:
                 tmp_path = tmp.name
             with st.spinner(f"Indexing {f.name}..."):
                 try:
-                    n = load_document(tmp_path)
+                    n = load_document(tmp_path, source_name=f.name)
                     st.success(f"✅ {f.name}: {n} chunks indexed")
                 except Exception as e:
                     st.error(f"❌ {f.name}: {e}")
@@ -157,6 +157,7 @@ if user_input:
         with st.spinner("Thinking..."):
             sql = None
             df  = None
+            resolved_question = None
 
             if route == "clarify":
                 answer = (
@@ -171,20 +172,22 @@ if user_input:
                 answer = answer_rag_question(user_input, chunks)
 
             elif route == "both":
-                result    = answer_sql_question(user_input, st.session_state.history)
-                sql       = result["sql"]
-                df        = result["dataframe"]
-                answer    = result["answer"]
+                result            = answer_sql_question(user_input, st.session_state.history)
+                sql               = result["sql"]
+                df                = result["dataframe"]
+                answer            = result["answer"]
+                resolved_question = result.get("resolved_question")
                 chunks    = retrieve(user_input)
                 doc_ans   = answer_rag_question(user_input, chunks) if chunks else ""
                 if doc_ans:
                     answer += f"\n\n**From documents:** {doc_ans}"
 
             else:  # sql
-                result = answer_sql_question(user_input, st.session_state.history)
-                sql    = result["sql"]
-                df     = result["dataframe"]
-                answer = result["answer"]
+                result            = answer_sql_question(user_input, st.session_state.history)
+                sql               = result["sql"]
+                df                = result["dataframe"]
+                answer            = result["answer"]
+                resolved_question = result.get("resolved_question")
                 if result.get("error"):
                     answer = f"⚠️ {answer}"
 
@@ -203,4 +206,5 @@ if user_input:
         "content": answer,
         "sql": sql,
         "dataframe": df,
+        "resolved_question": resolved_question,
     })

@@ -2,6 +2,8 @@
 Text-to-SQL using Google Gemini (gemini-3.1-flash-lite) via google-genai SDK.
 
 Flow:
+  0. Resolve relative-time phrases ("last year", "this semester") into
+     explicit term_code/cohort_year values (see term_resolver.py)
   1. Build system prompt with full schema context
   2. Ask Gemini to generate Snowflake SQL for the user question
   3. Execute the SQL against Snowflake
@@ -12,6 +14,8 @@ Flow:
 import os
 import re
 import pandas as pd
+import sqlglot
+from sqlglot import exp
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -19,6 +23,13 @@ from dotenv import load_dotenv
 from .snowflake_client import run_query
 from .schema_context import get_system_prompt
 from .conversation import ConversationHistory
+from .term_resolver import resolve_relative_terms
+
+_STUDENT_ID_GUARD_MESSAGE = (
+    "This query cannot be run — student identifiers cannot be returned "
+    "in raw form per data privacy policy."
+)
+_AGGREGATE_TYPES = (exp.Count, exp.Avg, exp.Sum, exp.Min, exp.Max)
 
 load_dotenv()
 
@@ -37,20 +48,40 @@ Rules for SQL generation:
 - Query ONLY tables in the REPORT schema (REPORT.fct_graduation_rate,
   REPORT.fct_retention_rate_cohort, REPORT.fct_retention_rate_term,
   REPORT.fct_graduation_rate_term, REPORT.fct_enrollment_term,
-  REPORT.dim_program_episode)
+  REPORT.dim_program_episode, REPORT.PREDICTION_MODEL)
 - For enrollment headcounts, use COUNT(DISTINCT student_id) on
   REPORT.fct_enrollment_term, not COUNT(*) or COUNT(student_id) --
   it has one row per program episode per term, so a student with
   multiple programs in the same term has multiple rows
+- For dropout/at-risk/prediction questions, use REPORT.PREDICTION_MODEL.
+  risk_flag is 'YES'/'NO'/NULL (NULL = graduated, not scored).
+  dropout_probability is NULL for graduated students -- filter with
+  WHERE risk_flag IS NOT NULL when computing rates over scored students only.
 - Only SELECT statements — no INSERT, UPDATE, DELETE, DROP, CREATE
 - Never AVG(graduation_rate_pct) or AVG(first_year_retention_rate_pct)
   always SUM numerator / SUM denominator * 100
 - school='EN' for College of Engineering (not 'Engineering')
 - u_g='G' for Master's, u_g='U' for Undergrad, u_g='D' for Doctoral
 - pell='Y' for Pell-eligible
-- term_code is VARCHAR — use quotes: '202490' not 202490
+- term_code is VARCHAR in the fct_*/dim_* tables (quote it: '202490') but
+  NUMBER in REPORT.PREDICTION_MODEL (do NOT quote it there: term_code = 202610)
 - Limit results to 50 rows unless asked for all
 - Include ORDER BY for trend/time-series questions
+- For "highest/lowest/best/worst <rate>" questions using ORDER BY ... LIMIT 1:
+  a rate computed as SUM(numerator)/NULLIF(SUM(denominator),0) is NULL when
+  the denominator is 0 (e.g. an immature/not-yet-eligible cohort), and NULL
+  sorts FIRST even with ORDER BY ... DESC in Snowflake -- so an ineligible
+  row with a NULL rate can wrongly win the LIMIT 1 instead of the real
+  highest value. Always add a WHERE clause excluding zero/NULL denominators
+  (e.g. WHERE one_year_eligible_cohort_size > 0) before ORDER BY ... LIMIT
+  on any computed rate column.
+- DATA GOVERNANCE: student_id must NEVER appear as a bare column in a SELECT
+  list, ORDER BY, or anywhere its raw value would be returned to the user --
+  it may ONLY appear inside an aggregate function (COUNT, AVG, SUM, MIN, MAX),
+  e.g. COUNT(DISTINCT student_id). A query that selects student_id directly
+  (e.g. to "list student IDs") will be blocked before execution -- write
+  aggregate queries instead (counts, rates, distributions) rather than
+  returning individual student identifiers.
 """
 
 _ANSWER_SYSTEM = """
@@ -61,6 +92,38 @@ Include the key numbers. Add a brief note if the result has important caveats
 (e.g. recent cohorts excluded, small sample size, etc.).
 Do NOT repeat the SQL. Just answer naturally.
 """
+
+
+def _violates_student_id_guard(sql: str) -> bool:
+    """
+    Data-governance guard: student_id must never appear as a bare column --
+    only inside an aggregate function (COUNT/AVG/SUM/MIN/MAX). Returns True
+    if the SQL returns a raw student_id value anywhere (including nested
+    subqueries), False otherwise.
+
+    If the SQL fails to parse, this returns False (not a violation) so a
+    parser limitation on malformed SQL doesn't block unrelated legitimate
+    queries -- run_query() will surface the real SQL error regardless.
+    """
+    try:
+        tree = sqlglot.parse_one(sql, read="snowflake")
+    except Exception:
+        return False
+
+    for column in tree.find_all(exp.Column):
+        if column.name.lower() != "student_id":
+            continue
+        node = column.parent
+        wrapped = False
+        while node is not None:
+            if isinstance(node, _AGGREGATE_TYPES):
+                wrapped = True
+                break
+            node = node.parent
+        if not wrapped:
+            return True
+
+    return False
 
 
 def _extract_sql(text: str) -> str | None:
@@ -92,8 +155,15 @@ def _build_contents(history: ConversationHistory, question: str) -> list:
 
 def answer_sql_question(question: str, history: ConversationHistory) -> dict:
     """
-    Returns dict with: answer, sql, dataframe, error
+    Returns dict with: answer, sql, dataframe, error, resolved_question
     """
+    try:
+        resolved_question = resolve_relative_terms(question)
+    except Exception:
+        # If term resolution fails (e.g. Snowflake unavailable), fall back to
+        # the raw question rather than blocking the whole request.
+        resolved_question = question
+
     system_prompt = get_system_prompt() + "\n\n" + _SQL_SYSTEM_ADDENDUM
     config = types.GenerateContentConfig(
         system_instruction=system_prompt,
@@ -102,7 +172,7 @@ def answer_sql_question(question: str, history: ConversationHistory) -> dict:
     )
 
     # Step 1: generate SQL
-    contents = _build_contents(history, question)
+    contents = _build_contents(history, resolved_question)
     sql_response = _client.models.generate_content(
         model=MODEL,
         contents=contents,
@@ -112,7 +182,18 @@ def answer_sql_question(question: str, history: ConversationHistory) -> dict:
     sql = _extract_sql(sql_text)
 
     if not sql:
-        return {"answer": sql_text, "sql": None, "dataframe": None, "error": None}
+        return {
+            "answer": sql_text, "sql": None, "dataframe": None, "error": None,
+            "resolved_question": resolved_question,
+        }
+
+    # Data-governance guard: never execute a query that returns bare student_id
+    if _violates_student_id_guard(sql):
+        return {
+            "answer": _STUDENT_ID_GUARD_MESSAGE,
+            "sql": sql, "dataframe": None, "error": "governance_violation",
+            "resolved_question": resolved_question,
+        }
 
     # Step 2: execute SQL
     df, error = run_query(sql)
@@ -132,12 +213,21 @@ def answer_sql_question(question: str, history: ConversationHistory) -> dict:
             model=MODEL, contents=retry_contents, config=config
         )
         sql = _extract_sql(retry_resp.text) or sql
+
+        if _violates_student_id_guard(sql):
+            return {
+                "answer": _STUDENT_ID_GUARD_MESSAGE,
+                "sql": sql, "dataframe": None, "error": "governance_violation",
+                "resolved_question": resolved_question,
+            }
+
         df, error = run_query(sql)
 
         if error:
             return {
                 "answer": f"I couldn't generate valid SQL for this question. Error: {error}",
                 "sql": sql, "dataframe": None, "error": error,
+                "resolved_question": resolved_question,
             }
 
     # Step 4: format as plain English
@@ -165,4 +255,7 @@ def answer_sql_question(question: str, history: ConversationHistory) -> dict:
         )
         answer = fmt_resp.text
 
-    return {"answer": answer, "sql": sql, "dataframe": df, "error": None}
+    return {
+        "answer": answer, "sql": sql, "dataframe": df, "error": None,
+        "resolved_question": resolved_question,
+    }

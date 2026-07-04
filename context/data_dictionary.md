@@ -279,6 +279,16 @@ Total Enrolled = COUNT(DISTINCT student_id) from fct_enrollment_term
 - "How many students started a Master's program in 2020?"
 - "How many first-time PhD students enrolled in the College of Computing?"
 
+### 7. REPORT.PREDICTION_MODEL (ML DROPOUT PREDICTIONS)
+**Use when asked about:** dropout risk, at-risk students, prediction, risk score
+**Grain:** one row per student, most recent scored term only (single snapshot, not longitudinal)
+**Key columns:** student_id, u_g, school, degtype, firstgen, pell, gender, academic_state, regstat, accumgpa, creditenr, term_code, term_year, term_type, semester, dropout_probability, risk_flag
+**IMPORTANT:** term_code here is NUMBER (unquoted: `term_code = 202610`), NOT VARCHAR like the fct_*/dim_* tables above (which use `'202490'`).
+**IMPORTANT:** risk_flag is 'YES'/'NO'/NULL (NULL = student already graduated, not scored). dropout_probability is also NULL for those rows. Filter `WHERE risk_flag IS NOT NULL` to restrict to actually-scored students.
+**Example questions:**
+- "Which students are at high risk of dropping out?"
+- "What is the average dropout probability by school?"
+
 ---
 
 ## COMMON QUESTION ROUTING GUIDE
@@ -293,6 +303,7 @@ Total Enrolled = COUNT(DISTINCT student_id) from fct_enrollment_term
 | Pell enrollment by semester | fct_enrollment_term (COUNT DISTINCT student_id) |
 | Average GPA / credit hours | fct_enrollment_term |
 | Student demographics / cohort attributes | dim_program_episode |
+| Dropout risk / at-risk students / prediction | PREDICTION_MODEL (WHERE risk_flag IS NOT NULL) |
 
 ---
 
@@ -308,3 +319,5 @@ Total Enrolled = COUNT(DISTINCT student_id) from fct_enrollment_term
 8. **All rate tables already exclude immature cohorts** — no extra WHERE clause needed for maturity
 9. **term_code arithmetic**: same season last year = term_code - 100 (e.g. 202490 → 202390)
 10. **Multiple episodes**: one student can have both a BS episode and a PHD episode — use program_episode_id not student_id when counting unique programs
+11. **PREDICTION_MODEL.term_code is NUMBER, not VARCHAR** — do not quote it (`term_code = 202610`), unlike every other table's term_code
+12. **PREDICTION_MODEL.risk_flag/dropout_probability are NULL for graduated students** — filter `WHERE risk_flag IS NOT NULL` when computing rates over scored students

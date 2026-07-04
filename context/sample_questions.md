@@ -225,6 +225,30 @@ ORDER BY pell;
 
 ---
 
+## EXAMPLE 13
+**Question:** Which cohort year had the highest 1-year retention rate for doctoral students?
+
+**SQL:**
+```sql
+SELECT
+    cohort_year,
+    SUM(one_year_eligible_cohort_size) AS eligible,
+    SUM(one_year_retained_count)       AS retained,
+    ROUND(100.0 * SUM(one_year_retained_count) / NULLIF(SUM(one_year_eligible_cohort_size), 0), 2) AS first_year_retention_rate_pct
+FROM REPORT.fct_retention_rate_cohort
+WHERE u_g = 'D'
+GROUP BY cohort_year
+HAVING SUM(one_year_eligible_cohort_size) > 0
+ORDER BY first_year_retention_rate_pct DESC
+LIMIT 1;
+```
+
+**Answer:** "The 2020 doctoral cohort had the highest 1-year retention rate at 91.10% (174 of 191 eligible students retained)."
+
+**Why the HAVING clause matters:** fct_retention_rate_cohort keeps a row for every cohort_year even when a cohort is too recent to be eligible yet (one_year_eligible_cohort_size = 0, e.g. the 2026 doctoral cohort). Dividing by NULLIF(0, 0) makes the rate NULL for that row, and NULL sorts FIRST even under ORDER BY ... DESC in Snowflake -- so without the HAVING filter, the ineligible 2026 row would wrongly win the LIMIT 1 instead of the real answer (2020). Always exclude zero/NULL denominators before ORDER BY ... LIMIT on any computed rate.
+
+---
+
 ## COMMON MISTAKES TO AVOID
 
 1. **WRONG:** `AVG(graduation_rate_pct)` — never average pre-computed rates
@@ -244,3 +268,10 @@ ORDER BY pell;
 
 6. **WRONG:** Adding a WHERE clause to filter out recent cohorts in fct_graduation_rate
    **RIGHT:** The maturity filter is already baked in — just query the table directly
+
+7. **WRONG:** `ORDER BY <computed_rate> DESC LIMIT 1` on fct_retention_rate_cohort/
+   fct_retention_rate_term without excluding zero-denominator rows first —
+   NULL rates (from ineligible/immature cohorts) sort FIRST even with DESC
+   and will wrongly win the LIMIT 1
+   **RIGHT:** Add `HAVING SUM(<eligible_size_or_denominator_column>) > 0`
+   before `ORDER BY <computed_rate> DESC LIMIT 1` (see Example 13)

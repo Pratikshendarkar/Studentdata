@@ -40,14 +40,24 @@ def _get_vectorstore():
     return _vectorstore
 
 
-def load_document(file_path) -> int:
-    """Load PDF or text into ChromaDB. Returns chunk count."""
+def load_document(file_path, source_name: str | None = None) -> int:
+    """
+    Load PDF or text into ChromaDB. Returns chunk count.
+
+    `source_name` is the name to record/dedup by (e.g. the original uploaded
+    filename) -- defaults to the file_path's own name if not given. This
+    matters because callers (e.g. app.py's uploader) often pass a temp file
+    path whose random name would otherwise break both the sidebar's
+    "loaded docs" display and the dedup-on-re-upload check below.
+    """
     from langchain_community.document_loaders import PyPDFLoader, TextLoader
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Not found: {path}")
+
+    source = source_name or path.name
 
     loader = PyPDFLoader(str(path)) if path.suffix.lower() == ".pdf" \
              else TextLoader(str(path), encoding="utf-8")
@@ -63,10 +73,10 @@ def load_document(file_path) -> int:
     texts      = [c.page_content for c in chunks]
     embeddings = _get_embedder().encode(texts).tolist()
     collection = _get_vectorstore()
-    ids        = [f"{path.stem}_{i}" for i in range(len(texts))]
+    ids        = [f"{Path(source).stem}_{i}" for i in range(len(texts))]
 
     try:
-        existing = collection.get(where={"source": path.name})
+        existing = collection.get(where={"source": source})
         if existing["ids"]:
             collection.delete(ids=existing["ids"])
     except Exception:
@@ -74,7 +84,7 @@ def load_document(file_path) -> int:
 
     collection.add(
         documents=texts, embeddings=embeddings, ids=ids,
-        metadatas=[{"source": path.name, "chunk": i} for i in range(len(texts))],
+        metadatas=[{"source": source, "chunk": i} for i in range(len(texts))],
     )
     return len(texts)
 
