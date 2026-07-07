@@ -30,6 +30,7 @@ _SQL_KEYWORDS = [
     "term over term", "term-over-term",
     "cohort year", "matured cohort",
     "two year", "2-year", "one year", "1-year",
+    "plot", "chart", "graph", "visualize", "visualise",
 ]
 
 # Keywords that suggest a document/RAG question
@@ -37,12 +38,23 @@ _RAG_KEYWORDS = [
     "what does the brief say", "according to the report", "in the document",
     "what is the assignment", "explain the methodology", "round 1",
     "the pdf", "the report", "assumption", "formula defined",
+    "the file", "the document", "this scenario", "the scenario",
+    "uploaded", "summarize", "summarise", "the upload",
+    "mentioned in", "described in", "in the pdf", "in the file",
 ]
 
 
-def classify(question: str) -> str:
+def classify(question: str, has_documents: bool = False) -> str:
     """
     Returns: 'sql', 'rag', 'both', or 'clarify'
+
+    `has_documents` should reflect whether the user has any RAG documents
+    currently loaded (e.g. doc_count() > 0). When no SQL/RAG keyword matches
+    and a document is loaded, an ambiguous question is routed to 'rag'
+    rather than defaulting to 'sql' -- a loaded document is a strong signal
+    the user means to ask about it, and the old default silently sent such
+    questions into SQL generation, where the LLM would try to answer in
+    prose (from the document) that then got mis-parsed as SQL.
     """
     q_lower = question.lower()
 
@@ -60,5 +72,8 @@ def classify(question: str) -> str:
     # most questions in this context are data questions
     if len(question.split()) <= 3:
         return "clarify"
+
+    if has_documents:
+        return "rag"
 
     return "sql"  # default to SQL path for data context

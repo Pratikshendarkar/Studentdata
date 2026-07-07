@@ -1,0 +1,182 @@
+import pandas as pd
+
+from chatbot import chart_helper
+
+
+def test_wants_chart_detects_keywords():
+    assert chart_helper.wants_chart("Can you plot the graduation rate trend?")
+    assert chart_helper.wants_chart("Show me a chart of retention by school")
+    assert chart_helper.wants_chart("Graph the Pell gap over the years")
+    assert chart_helper.wants_chart("Visualize enrollment by term")
+
+
+def test_wants_chart_false_for_plain_question():
+    assert not chart_helper.wants_chart("What is the graduation rate for 2020?")
+    assert not chart_helper.wants_chart("How many students graduated in Fall 2024?")
+
+
+def test_single_scalar_row_not_chartable():
+    df = pd.DataFrame([{"total_graduates": 648}])
+    assert not chart_helper.has_chartable_shape(df)
+
+
+def test_empty_df_not_chartable():
+    df = pd.DataFrame()
+    assert not chart_helper.has_chartable_shape(df)
+
+
+def test_term_code_axis_plotted_as_categorical_not_numeric():
+    # Regression: term_code (YYYYTT, e.g. 202590) is an encoded ID, not a
+    # continuous quantity. Plotting it as a raw number makes Plotly
+    # auto-scale the axis into meaningless "201.6k, 202k" tick labels.
+    # It must be cast to string so it renders as an evenly-spaced
+    # categorical axis in chronological order instead.
+    df = pd.DataFrame({
+        "TERM_CODE": [201510, 201590, 201610, 201690, 202590, 202610],
+        "PELL_ELIGIBLE_MASTERS_STUDENTS": [228, 253, 231, 220, 289, 286],
+    })
+    fig = chart_helper.build_chart(df)
+    assert fig is not None
+    x_values = list(fig.data[0].x)
+    assert all(isinstance(v, str) for v in x_values)
+    assert x_values == ["201510", "201590", "201610", "201690", "202590", "202610"]
+    # dtype alone isn't sufficient -- Plotly can still auto-coerce an
+    # all-digit string axis back to numeric, so the layout's axis type
+    # must be explicitly forced to "category" as well.
+    assert fig.layout.xaxis.type == "category"
+
+
+def test_numeric_cohort_year_axis_is_chartable():
+    # Regression test: cohort_year is commonly stored as an int, not a
+    # string -- a numeric year column must still be picked as the x-axis,
+    # not skipped in favor of the numeric rate column.
+    df = pd.DataFrame({
+        "cohort_year": [2015, 2016, 2017, 2018, 2019, 2020],
+        "graduation_rate_pct": [44.02, 45.1, 46.0, 48.2, 50.1, 55.3],
+    })
+    assert chart_helper._find_x_column(df) == "cohort_year"
+    assert chart_helper.has_chartable_shape(df)
+    fig = chart_helper.build_chart(df)
+    assert fig is not None
+    assert list(fig.data[0].x) == [2015, 2016, 2017, 2018, 2019, 2020]
+    assert list(fig.data[0].y) == [44.02, 45.1, 46.0, 48.2, 50.1, 55.3]
+
+
+def test_trend_over_terms_is_chartable():
+    df = pd.DataFrame({
+        "current_term": ["202410", "202490", "202510", "202590"],
+        "term_graduation_rate_pct": [13.5, 18.9, 13.3, 18.4],
+    })
+    assert chart_helper.has_chartable_shape(df)
+    fig = chart_helper.build_chart(df)
+    assert fig is not None
+
+
+def test_breakdown_by_school_is_chartable():
+    df = pd.DataFrame({
+        "school": ["AD", "CC", "EN", "SL", "SM"],
+        "term_graduation_rate_pct": [21.3, 25.8, 22.0, 25.6, 26.3],
+    })
+    assert chart_helper.has_chartable_shape(df)
+    fig = chart_helper.build_chart(df)
+    assert fig is not None
+
+
+def test_multi_series_by_group_is_chartable():
+    df = pd.DataFrame({
+        "current_term": ["202410", "202410", "202490", "202490"],
+        "pell": ["Y", "N", "Y", "N"],
+        "graduation_rate_pct": [10.0, 15.0, 12.0, 18.0],
+    })
+    assert chart_helper.has_chartable_shape(df)
+    fig = chart_helper.build_chart(df)
+    assert fig is not None
+    # Multi-series chart should have one trace per group (Y, N)
+    assert len(fig.data) == 2
+
+
+def test_all_string_columns_not_chartable():
+    df = pd.DataFrame({
+        "student_id": ["S1", "S2", "S3"],
+        "school": ["AD", "CC", "EN"],
+    })
+    assert not chart_helper.has_chartable_shape(df)
+
+
+def test_build_chart_returns_none_for_unchartable_df():
+    df = pd.DataFrame([{"total": 5}])
+    assert chart_helper.build_chart(df) is None
+
+
+def test_single_row_multi_column_not_chartable():
+    # Even with numeric + categorical columns, a single row has nothing to trend
+    df = pd.DataFrame([{"school": "EN", "graduation_rate_pct": 22.0}])
+    assert not chart_helper.has_chartable_shape(df)
+
+
+def test_rate_question_prefers_rate_column_over_raw_count():
+    # Regression: a result with both a raw count column and a rate column
+    # (e.g. RETAINED_COUNT alongside RETENTION_RATE_PCT) must plot the
+    # rate when the question asks for "rate" -- not just take the first
+    # numeric column positionally, which previously plotted headcounts
+    # (in the thousands) on a y-axis the user expected to show a
+    # percentage (0-100).
+    df = pd.DataFrame({
+        "COHORT_YEAR": [2015, 2016, 2017, 2018],
+        "RETAINED_COUNT": [2950, 3010, 3040, 3030],
+        "RETENTION_RATE_PCT": [81.38, 81.99, 83.46, 81.06],
+    })
+    fig = chart_helper.build_chart(df, question="plot line graph for 1-year retention rate by cohort_year")
+    assert fig is not None
+    assert len(fig.data) == 1
+    assert list(fig.data[0].y) == [81.38, 81.99, 83.46, 81.06]
+
+
+def test_no_question_falls_back_to_first_column_positionally():
+    # Without question context, behavior is unchanged from before --
+    # multiple numeric columns are all plotted as separate series.
+    df = pd.DataFrame({
+        "COHORT_YEAR": [2015, 2016, 2017, 2018],
+        "RETAINED_COUNT": [2950, 3010, 3040, 3030],
+        "RETENTION_RATE_PCT": [81.38, 81.99, 83.46, 81.06],
+    })
+    fig = chart_helper.build_chart(df)
+    assert fig is not None
+    assert len(fig.data) == 2
+
+
+def test_rate_column_returned_as_string_dtype_still_detected_numeric():
+    # Regression: Snowflake's connector can return NUMBER/DECIMAL columns
+    # as Python str/Decimal objects rather than pandas float dtype. Without
+    # coercion, is_numeric_dtype() returns False for the rate column, so
+    # it gets excluded from numeric_cols entirely and misidentified as a
+    # low-cardinality categorical column instead -- producing a broken
+    # chart where each rate VALUE (57.11, 58.81, ...) becomes its own
+    # legend entry/color instead of one continuous line, and a raw count
+    # column ends up as the y-axis instead.
+    df = pd.DataFrame({
+        "COHORT_YEAR": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
+        "TOTAL_RETAINED": [1780, 1790, 1800, 1770, 1810, 1820, 1830, 1840, 1780, 200],
+        "TWO_YEAR_RETENTION_RATE_PCT": pd.array(
+            ["57.11", "57.44", "58.81", "57.34", "56.80", "57.83", "58.08", "55.21", "56.95", "50.58"],
+            dtype=object,
+        ),
+    })
+    assert chart_helper.has_chartable_shape(df)
+    fig = chart_helper.build_chart(df, question="plot the line graph for 2 year retention rate by cohort year")
+    assert fig is not None
+    assert len(fig.data) == 1
+    assert list(fig.data[0].y) == [57.11, 57.44, 58.81, 57.34, 56.80, 57.83, 58.08, 55.21, 56.95, 50.58]
+
+
+def test_genuinely_categorical_string_column_not_coerced():
+    # A real categorical column (school codes) must NOT be forced into
+    # numeric -- only columns whose values ALL parse cleanly as numbers
+    # should be coerced.
+    df = pd.DataFrame({
+        "SCHOOL": ["AD", "CC", "EN", "SL", "SM"],
+        "GRADUATION_RATE_PCT": [21.3, 25.8, 22.0, 25.6, 26.3],
+    })
+    coerced = chart_helper._coerce_numeric_looking_columns(df)
+    assert not pd.api.types.is_numeric_dtype(coerced["SCHOOL"])
+    assert list(coerced["SCHOOL"]) == ["AD", "CC", "EN", "SL", "SM"]

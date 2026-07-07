@@ -203,10 +203,14 @@ Attrition Rate % = 100 - ARR %
 
 ### Term Graduation Rate
 ```
-Term Graduation Rate % = (graduated_students / prior_students) × 100
+Term Graduation Rate % = (graduated_students / eligible_students) × 100
 ```
-- graduated_students = students who graduated BETWEEN prior term and current term
-- prior_students = students enrolled in the prior major term
+- graduated_students = students who graduated IN current_term
+- eligible_students = first-time-cohort episodes due to graduate by
+  current_term (matured per degree-length windows: U=4yr, G=2yr, D=5yr)
+  and not yet graduated. NOT everyone enrolled last term -- an episode
+  stays eligible every term (cumulative) until it actually graduates, so
+  a late graduate is still counted.
 - Source table: REPORT.fct_graduation_rate_term
 
 ### Enrollment Headcount
@@ -252,12 +256,13 @@ Total Enrolled = COUNT(DISTINCT student_id) from fct_enrollment_term
 - "What is the term-over-term retention trend for Engineering?"
 
 ### 4. REPORT.fct_graduation_rate_term (TERM LEVEL)
-**Use when asked about:** graduation volume by semester, how many students graduated this term
+**Use when asked about:** graduation volume by semester, how many students graduated this term, graduation rate this term
 **Grain:** one row per (current_term, degtype, u_g, gender, school, pell)
-**Key columns:** current_term, prior_students, graduated_students, term_graduation_rate_pct
+**Key columns:** current_term, eligible_students, graduated_students, term_graduation_rate_pct
+**Denominator note:** eligible_students is NOT everyone enrolled last term -- it's first-time-cohort episodes due to graduate by current_term (matured per degree-length windows), not yet graduated
 **Example questions:**
 - "How many students graduated in Spring 2024?"
-- "What percentage of students graduated in Fall 2023?"
+- "What percentage of eligible students graduated in Fall 2023?"
 
 ### 5. REPORT.fct_enrollment_term (STUDENT-LEVEL LONGITUDINAL / TERM SNAPSHOT)
 **Use when asked about:** enrollment headcounts by term, Pell-eligible enrollment, how many students enrolled, individual student details, GPA analysis, credit hours, full-time vs part-time

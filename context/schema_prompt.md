@@ -46,9 +46,13 @@ Key columns: current_term, degtype, u_g, school,
 
 ### REPORT.fct_graduation_rate_term — TERM LEVEL
 One row per (current_term, degtype, u_g, gender, school, pell).
-Use for: "how many graduated this semester", "graduation volume by term"
+Denominator is NOT everyone enrolled last term -- it's first-time-cohort
+episodes due to graduate by current_term (matured per degree-length
+windows: U=4yr, G=2yr, D=5yr) and not yet graduated. Cumulative
+eligibility: an episode stays eligible every term until it graduates.
+Use for: "how many graduated this semester", "graduation rate this term"
 Key columns: current_term, degtype, u_g, gender, school, pell,
-             prior_students, graduated_students, term_graduation_rate_pct
+             eligible_students, graduated_students, term_graduation_rate_pct
 
 ### REPORT.fct_enrollment_term — STUDENT LONGITUDINAL / TERM SNAPSHOT
 One row per program episode per term (a student with two concurrent
