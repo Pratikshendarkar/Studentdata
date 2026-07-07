@@ -1,6 +1,16 @@
 """
 RAG module using google-genai SDK (Gemini gemini-3.1-flash-lite).
 Loads PDF/text docs, embeds with sentence-transformers, stores in ChromaDB.
+
+KEY FEATURES:
+- Document ingestion: PDFs and text files chunked to 800 chars with 100-char overlap
+- Persistent storage: ChromaDB on disk (survives app restarts)
+- Query rewriting: rewrite_query_for_retrieval() uses conversation history to resolve
+  conversational references (e.g., "and what about that one?") into standalone queries
+  before embedding, so follow-up questions don't lose context
+- Retrieval: top-6 chunks (cosine similarity) fetched for each rewritten query
+- Graceful fallback: if query rewriting fails or no docs exist, the chatbot returns
+  a clear message rather than hallucinating answers
 """
 
 import os
@@ -89,7 +99,59 @@ def load_document(file_path, source_name: str | None = None) -> int:
     return len(texts)
 
 
-def retrieve(query: str, top_k: int = 5) -> list[str]:
+def rewrite_query_for_retrieval(question: str, history_messages: list[dict]) -> str:
+    """
+    Resolve conversational references ("the second point", "what about that
+    one") into a standalone query before embedding it for retrieval.
+
+    Retrieval otherwise has no memory: each question is embedded in
+    isolation, so a follow-up that only makes sense against the prior turn
+    retrieves the wrong (or no) chunks. `history_messages` is the last few
+    turns in {"role", "content"} form (see ConversationHistory.to_api_format);
+    only the most recent 6 messages (~3 user/assistant pairs) are used so the
+    rewrite prompt stays cheap and focused on immediate context, not the
+    whole conversation.
+
+    Falls back to the original question unchanged if rewriting fails or the
+    model returns something empty/degenerate, so a rewrite-step failure never
+    blocks retrieval outright.
+    """
+    recent = history_messages[-6:]
+    if not recent:
+        return question
+
+    transcript = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
+    config = types.GenerateContentConfig(
+        system_instruction=(
+            "Rewrite the user's latest question into a standalone question "
+            "that makes sense without the conversation history, by resolving "
+            "any references to earlier turns (e.g. 'the second point', 'that "
+            "one', 'what about X'). Preserve the original meaning and intent "
+            "exactly. Output ONLY the rewritten question, nothing else. If "
+            "the question is already standalone, return it unchanged."
+        ),
+        max_output_tokens=200,
+        temperature=0.0,
+    )
+    try:
+        resp = _client.models.generate_content(
+            model=MODEL,
+            contents=[types.Content(
+                role="user",
+                parts=[types.Part.from_text(
+                    text=f"Conversation so far:\n{transcript}\n\n"
+                         f"Latest question: {question}"
+                )]
+            )],
+            config=config,
+        )
+        rewritten = (resp.text or "").strip()
+        return rewritten if rewritten else question
+    except Exception:
+        return question
+
+
+def retrieve(query: str, top_k: int = 6) -> list[str]:
     collection = _get_vectorstore()
     if collection.count() == 0:
         return []
