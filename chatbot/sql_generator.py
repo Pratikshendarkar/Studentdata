@@ -30,6 +30,12 @@ _STUDENT_ID_GUARD_MESSAGE = (
     "in raw form per data privacy policy."
 )
 _AGGREGATE_TYPES = (exp.Count, exp.Avg, exp.Sum, exp.Min, exp.Max)
+# Constructs that mean a column reference is filter/join plumbing -- it
+# narrows which rows participate but is never itself returned as an output
+# value, e.g. `WHERE student_id IN (...)` or `JOIN ... ON d.student_id =
+# e.student_id`. A student_id reference confined to one of these is not a
+# governance violation, even though it's "bare" (not aggregate-wrapped).
+_FILTER_CONTEXT_TYPES = (exp.Where, exp.Join, exp.In, exp.Exists)
 
 load_dotenv()
 
@@ -96,10 +102,13 @@ Do NOT repeat the SQL. Just answer naturally.
 
 def _violates_student_id_guard(sql: str) -> bool:
     """
-    Data-governance guard: student_id must never appear as a bare column --
-    only inside an aggregate function (COUNT/AVG/SUM/MIN/MAX). Returns True
-    if the SQL returns a raw student_id value anywhere (including nested
-    subqueries), False otherwise.
+    Data-governance guard: student_id must never be returned as an output
+    value -- only used inside an aggregate function (COUNT/AVG/SUM/MIN/MAX)
+    or as filter/join plumbing (WHERE ... IN (...), JOIN ... ON, EXISTS(...))
+    that narrows rows without itself appearing in the result set. Returns
+    True if the SQL would return a raw student_id value anywhere (including
+    nested subqueries whose own SELECT is the thing ultimately consumed by
+    the caller as output), False otherwise.
 
     If the SQL fails to parse, this returns False (not a violation) so a
     parser limitation on malformed SQL doesn't block unrelated legitimate
@@ -113,14 +122,20 @@ def _violates_student_id_guard(sql: str) -> bool:
     for column in tree.find_all(exp.Column):
         if column.name.lower() != "student_id":
             continue
+
         node = column.parent
         wrapped = False
+        filtered = False
         while node is not None:
             if isinstance(node, _AGGREGATE_TYPES):
                 wrapped = True
                 break
+            if isinstance(node, _FILTER_CONTEXT_TYPES):
+                filtered = True
+                break
             node = node.parent
-        if not wrapped:
+
+        if not wrapped and not filtered:
             return True
 
     return False
