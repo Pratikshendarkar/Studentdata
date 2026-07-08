@@ -16,4 +16,5 @@ rd2_dbt/logs/
 # Snowflake_ChatBot
 docs/*.pdf
 docs/*.docx
+!docs/AI_Analytics_Engineer_Rd2.pdf
 chroma_db/

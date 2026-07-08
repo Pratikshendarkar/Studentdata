@@ -31,6 +31,7 @@ _SQL_KEYWORDS = [
     "cohort year", "matured cohort",
     "two year", "2-year", "one year", "1-year",
     "plot", "chart", "graph", "visualize", "visualise",
+    "u_g", "degtype",
 ]
 
 # Keywords that suggest a document/RAG question
