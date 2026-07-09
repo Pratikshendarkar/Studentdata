@@ -1,6 +1,5 @@
 # Snowflake_ChatBot dependencies
-snowflake-connector-python==3.12.4
-pyOpenSSL>=25.0.0
+snowflake-connector-python>=3.12.4
 python-dotenv==1.0.1
 google-genai>=1.0.0
 streamlit>=1.35.0
