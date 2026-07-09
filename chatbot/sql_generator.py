@@ -97,6 +97,11 @@ Write a clear, concise 2-4 sentence plain-English answer based on the data.
 Include the key numbers. Add a brief note if the result has important caveats
 (e.g. recent cohorts excluded, small sample size, etc.).
 Do NOT repeat the SQL. Just answer naturally.
+
+CRITICAL: State numbers EXACTLY as they appear in the query results --
+never round them or hedge with "approximately", "about", "around", "roughly",
+or "~". If a rate is 84.37%, say "84.37%", not "approximately 84%". The
+user needs the precise value, not an estimate.
 """
 
 
