@@ -1,34 +1,24 @@
 """
 Chart-worthiness detection and chart-type selection for SQL query results.
 
-wants_chart() is a two-stage check: a fast regex heuristic first (catches
-the vast majority of phrasings -- "plot X", "chart X", "X trend over
-time" -- with zero cost), falling back to a small Gemini call only when
-the heuristic says no. This is called only on questions that already
-produced a SQL result (app.py only invokes it after a SQL/both route
-returns a non-empty dataframe), so the LLM fallback never adds cost to
-RAG/clarify-routed turns or to the common chart phrasings the heuristic
-already covers.
+Rule-based, not LLM-driven, to keep chart selection deterministic and
+fast -- same pattern already used by term_resolver.py and
+query_classifier.py in this codebase. wants_chart() is called on every
+single chat message regardless of route, so it deliberately avoids an
+LLM call (that would add latency to every turn, not just chart-relevant
+ones) in favor of phrase-pattern matching.
 
-Even when wants_chart() is true, a chart only renders if the result
-shape actually supports one (has_chartable_shape()). A chart cue alone
-(e.g. "plot how many students graduated in Fall 2024") is not sufficient
-if the result is a single scalar row with nothing to visualize.
+Only called when the user's question passes wants_chart(); even then, a
+chart only renders if the result shape actually supports one
+(has_chartable_shape()). A chart cue alone (e.g. "plot how many students
+graduated in Fall 2024") is not sufficient if the result is a single
+scalar row with nothing to visualize.
 """
 
-import os
 import re
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from google import genai
-from google.genai import types
-from dotenv import load_dotenv
-
-load_dotenv()
-
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-3.1-flash-lite"
 
 # Imperative visualization verbs -- "plot X", "graph X", "chart X",
 # "visualize X". A plain substring match on these words alone is too
@@ -109,67 +99,15 @@ def _is_time_axis_column(col: str) -> bool:
     return bool(_TERM_COL_PATTERN.search(col)) and not _METRIC_SUFFIX_PATTERN.search(col)
 
 
-def _wants_chart_heuristic(question: str) -> bool:
-    """Fast, free, deterministic positive-signal check. Exclusions are
-    handled by the caller (wants_chart()) before this runs -- see there
-    for why exclusions are checked first and separately."""
-    return bool(_POSITIVE_VERB_PATTERN.search(question) or _TREND_WITH_TIME_CUE.search(question))
-
-
-def _wants_chart_llm(question: str) -> bool:
-    """
-    Fallback classifier for phrasings the regex heuristic doesn't cover
-    (e.g. "can I see this broken down by year instead of one number" --
-    clearly wants a visual comparison but uses none of the expected
-    verbs). Only called when the heuristic already said no, so this never
-    adds latency to the common, already-covered phrasings.
-
-    Fails closed (returns False) on any error or non-yes/no response, so
-    an API hiccup falls back to a plain table rather than blocking the
-    answer or crashing the turn.
-    """
-    config = types.GenerateContentConfig(
-        system_instruction=(
-            "The user asked a question about student enrollment/graduation/"
-            "retention data, and it was just answered with a SQL query. "
-            "Decide if the user's question is asking to SEE the result as a "
-            "visual chart/graph/plot (a trend, a breakdown, a comparison "
-            "across categories or time), as opposed to just wanting the "
-            "number(s) or a text explanation. "
-            "Answer with exactly one word: YES or NO."
-        ),
-        max_output_tokens=5,
-        temperature=0.0,
-    )
-    try:
-        resp = _client.models.generate_content(
-            model=MODEL,
-            contents=[types.Content(role="user", parts=[types.Part.from_text(text=question)])],
-            config=config,
-        )
-        return (resp.text or "").strip().upper().startswith("Y")
-    except Exception:
-        return False
-
-
 def wants_chart(question: str) -> bool:
     """
-    True if the question is asking for a visualization. The domain-
-    specific exclusion list (non-visual "graph"/"chart" usage, or
-    definitional "what does this chart measure" questions) is an
-    absolute veto -- it wins even over the LLM fallback, since it
-    encodes certainty about this specific domain's vocabulary that a
-    general LLM prompt doesn't have. Otherwise: the fast regex heuristic
-    first (covers "plot X"/"chart X"/"X trend over time" and similar at
-    zero cost); if that finds no positive signal, fall back to a small
-    LLM call to catch unusual phrasings the heuristic can't express
-    (e.g. "can I see this broken down by year instead").
+    True if the question is asking for a visualization, not just
+    mentioning "chart"/"graph"/"trend" incidentally. An exclusion match
+    (non-visual domain usage) always wins over a positive match.
     """
     if _NON_VISUAL_EXCLUSIONS.search(question):
         return False
-    if _wants_chart_heuristic(question):
-        return True
-    return _wants_chart_llm(question)
+    return bool(_POSITIVE_VERB_PATTERN.search(question) or _TREND_WITH_TIME_CUE.search(question))
 
 
 def _find_x_column(df: pd.DataFrame) -> str | None:
