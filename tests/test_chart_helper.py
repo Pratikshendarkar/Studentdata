@@ -15,6 +15,35 @@ def test_wants_chart_false_for_plain_question():
     assert not chart_helper.wants_chart("How many students graduated in Fall 2024?")
 
 
+def test_wants_chart_excludes_non_visual_graph_usage():
+    # "graph"/"chart" used as data-structure/lineage terms, not a
+    # visualization request -- must NOT trigger chart mode even though
+    # the word "graph" is literally present.
+    assert not chart_helper.wants_chart("Is there a data lineage graph for this pipeline?")
+    assert not chart_helper.wants_chart("What does the dependency graph look like for this dbt model?")
+    assert not chart_helper.wants_chart("Do we use a graph database anywhere in this stack?")
+
+
+def test_wants_chart_excludes_explain_the_chart_questions():
+    # Asking what a chart/column measures is a definitional question,
+    # not a request to render one.
+    assert not chart_helper.wants_chart("What does the retention chart measure?")
+    assert not chart_helper.wants_chart("What is the graduation graph supposed to mean?")
+
+
+def test_wants_chart_trend_alone_without_time_cue_is_false():
+    # "trend" without an explicit time/breakdown cue is too vague to
+    # commit to a chart -- can be answered in prose just as well.
+    assert not chart_helper.wants_chart("What's the trend here?")
+    assert not chart_helper.wants_chart("Is there a trend?")
+
+
+def test_wants_chart_trend_with_time_cue_is_true():
+    assert chart_helper.wants_chart("Show the enrollment trend over time")
+    assert chart_helper.wants_chart("What is the retention trend by year?")
+    assert chart_helper.wants_chart("Graduation trend by cohort")
+
+
 def test_single_scalar_row_not_chartable():
     df = pd.DataFrame([{"total_graduates": 648}])
     assert not chart_helper.has_chartable_shape(df)

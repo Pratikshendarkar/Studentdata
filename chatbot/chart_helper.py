@@ -3,13 +3,16 @@ Chart-worthiness detection and chart-type selection for SQL query results.
 
 Rule-based, not LLM-driven, to keep chart selection deterministic and
 fast -- same pattern already used by term_resolver.py and
-query_classifier.py in this codebase.
+query_classifier.py in this codebase. wants_chart() is called on every
+single chat message regardless of route, so it deliberately avoids an
+LLM call (that would add latency to every turn, not just chart-relevant
+ones) in favor of phrase-pattern matching.
 
-Only called when the user's question contains a plotting cue word (see
-CHART_KEYWORDS); even then, a chart only renders if the result shape
-actually supports one (has_chartable_shape()). A cue word alone (e.g.
-"plot how many students graduated in Fall 2024") is not sufficient if
-the result is a single scalar row with nothing to visualize.
+Only called when the user's question passes wants_chart(); even then, a
+chart only renders if the result shape actually supports one
+(has_chartable_shape()). A chart cue alone (e.g. "plot how many students
+graduated in Fall 2024") is not sufficient if the result is a single
+scalar row with nothing to visualize.
 """
 
 import re
@@ -17,7 +20,38 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-CHART_KEYWORDS = ("plot", "chart", "graph", "trend", "visualize", "visualise")
+# Imperative visualization verbs -- "plot X", "graph X", "chart X",
+# "visualize X". A plain substring match on these words alone is too
+# blunt: "graph"/"chart" are also used non-visually in this domain (see
+# _NON_VISUAL_EXCLUSIONS below), so this is combined with an exclusion
+# pass rather than triggering on presence alone.
+_POSITIVE_VERB_PATTERN = re.compile(r"\b(plot|chart|graph|visuali[sz]e)\b", re.IGNORECASE)
+
+# "trend" alone is a weaker signal than an explicit chart verb -- "what's
+# the trend" can be answered in prose just as well as a chart. Only treat
+# it as chart-intent when paired with an explicit time/breakdown cue.
+_TREND_WITH_TIME_CUE = re.compile(
+    r"\btrend(s)?\b.*\b(over time|by year|by term|by semester|by cohort)\b"
+    r"|\b(over time|by year|by term|by semester|by cohort)\b.*\btrend(s)?\b",
+    re.IGNORECASE,
+)
+
+# Non-visual usages of "graph"/"chart" specific to this domain -- these
+# suppress the chart trigger even if a positive verb also matched, since
+# the word is being used as a data-structure/lineage term or the question
+# is asking to explain a chart/column rather than render one.
+_NON_VISUAL_EXCLUSIONS = re.compile(
+    r"\bdata lineage\b|\bdependency graph\b|\bgraph database\b|\bknowledge graph\b"
+    r"|\bwhat (is|does|are)\b.*\b(chart|graph)\b.*\b(mean|measure)\b",
+    re.IGNORECASE,
+)
+
+# NOT YET IMPLEMENTED: a secondary positive signal from breakdown/
+# comparison cues without an explicit chart verb ("break down graduation
+# rate by school over the years") would close the remaining false-negative
+# gap, but risks reintroducing false positives on plain lookups that
+# happen to include "by school" while only wanting one number. Deferred
+# until real usage shows the current heuristic still misses too much.
 
 _TERM_COL_PATTERN = re.compile(r"\b(term|year|semester)\b|term_code|term_year|cohort_year|current_term", re.IGNORECASE)
 _METRIC_SUFFIX_PATTERN = re.compile(r"rate|pct|percent|count|students|gpa|credit", re.IGNORECASE)
@@ -66,9 +100,14 @@ def _is_time_axis_column(col: str) -> bool:
 
 
 def wants_chart(question: str) -> bool:
-    """True if the question text contains a plotting cue word."""
-    q = question.lower()
-    return any(kw in q for kw in CHART_KEYWORDS)
+    """
+    True if the question is asking for a visualization, not just
+    mentioning "chart"/"graph"/"trend" incidentally. An exclusion match
+    (non-visual domain usage) always wins over a positive match.
+    """
+    if _NON_VISUAL_EXCLUSIONS.search(question):
+        return False
+    return bool(_POSITIVE_VERB_PATTERN.search(question) or _TREND_WITH_TIME_CUE.search(question))
 
 
 def _find_x_column(df: pd.DataFrame) -> str | None:
