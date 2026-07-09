@@ -207,7 +207,18 @@ def build_chart(df: pd.DataFrame, question: str | None = None):
     plot_df = df.sort_values(x_col) if is_ordered_axis else df.copy()
 
     is_code_like = bool(_CODE_LIKE_PATTERN.search(x_col))
+    category_order = None
     if is_code_like:
+        # Capture the chronological order (still numeric, correctly
+        # sortable) BEFORE casting to string -- needed below to force the
+        # category axis into this order explicitly. Without this, a
+        # grouped/multi-series chart (color=group_col) draws each group's
+        # trace independently and Plotly infers the shared category
+        # axis's order from per-trace first-appearance rather than the
+        # actual chronological sequence, visually clustering e.g. all
+        # Spring terms before all Fall terms instead of interleaving them
+        # by year.
+        category_order = plot_df[x_col].drop_duplicates().astype(str).tolist()
         # Cast to string so Plotly treats it as an evenly-spaced
         # categorical axis instead of auto-scaling it as a number.
         # dtype alone isn't always enough -- Plotly can still coerce an
@@ -238,5 +249,7 @@ def build_chart(df: pd.DataFrame, question: str | None = None):
     layout_kwargs = dict(margin=dict(l=10, r=10, t=30, b=10), height=350)
     if is_code_like:
         layout_kwargs["xaxis_type"] = "category"
+        layout_kwargs["xaxis_categoryorder"] = "array"
+        layout_kwargs["xaxis_categoryarray"] = category_order
     fig.update_layout(**layout_kwargs)
     return fig

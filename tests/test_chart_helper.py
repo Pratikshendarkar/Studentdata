@@ -234,3 +234,24 @@ def test_secondary_time_column_not_picked_as_metric():
         assert list(trace.y) != [2015, 2015] and list(trace.y) != [2016, 2016]
     all_y_values = [v for trace in fig.data for v in trace.y]
     assert set(all_y_values).issubset({2279, 2350, 2300, 2400})
+
+
+def test_multi_series_term_code_axis_uses_chronological_categoryarray():
+    # Regression: grouping by a second categorical column (e.g.
+    # TERM_SEASON: Spring/Fall) over a term_code x-axis previously let
+    # Plotly infer the shared category axis order from per-trace
+    # first-appearance, visually clustering all Spring terms before all
+    # Fall terms instead of interleaving them chronologically. The axis
+    # must be forced into the true chronological order via an explicit
+    # categoryarray.
+    df = pd.DataFrame({
+        "TERM_CODE": [201510, 201590, 201610, 201690, 201710, 201790],
+        "TERM_SEASON": ["Spring", "Fall", "Spring", "Fall", "Spring", "Fall"],
+        "TOTAL_ENROLLED": [2279, 2300, 2290, 2310, 2295, 2320],
+    })
+    fig = chart_helper.build_chart(df, question="visualize enrollment by term")
+    assert fig is not None
+    assert fig.layout.xaxis.categoryorder == "array"
+    assert list(fig.layout.xaxis.categoryarray) == [
+        "201510", "201590", "201610", "201690", "201710", "201790",
+    ]
