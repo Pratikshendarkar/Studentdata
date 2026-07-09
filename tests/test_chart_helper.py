@@ -1,9 +1,13 @@
+from unittest.mock import patch, MagicMock
+
 import pandas as pd
 
 from chatbot import chart_helper
 
 
 def test_wants_chart_detects_keywords():
+    # All of these have positive regex signal -- resolved by the
+    # heuristic alone, no LLM call needed.
     assert chart_helper.wants_chart("Can you plot the graduation rate trend?")
     assert chart_helper.wants_chart("Show me a chart of retention by school")
     assert chart_helper.wants_chart("Graph the Pell gap over the years")
@@ -11,8 +15,11 @@ def test_wants_chart_detects_keywords():
 
 
 def test_wants_chart_false_for_plain_question():
-    assert not chart_helper.wants_chart("What is the graduation rate for 2020?")
-    assert not chart_helper.wants_chart("How many students graduated in Fall 2024?")
+    # No regex signal -> falls through to the LLM fallback; mocked here
+    # to keep the test deterministic and free of live API calls.
+    with patch.object(chart_helper, "_wants_chart_llm", return_value=False):
+        assert not chart_helper.wants_chart("What is the graduation rate for 2020?")
+        assert not chart_helper.wants_chart("How many students graduated in Fall 2024?")
 
 
 def test_wants_chart_excludes_non_visual_graph_usage():
@@ -31,11 +38,56 @@ def test_wants_chart_excludes_explain_the_chart_questions():
     assert not chart_helper.wants_chart("What is the graduation graph supposed to mean?")
 
 
-def test_wants_chart_trend_alone_without_time_cue_is_false():
-    # "trend" without an explicit time/breakdown cue is too vague to
-    # commit to a chart -- can be answered in prose just as well.
-    assert not chart_helper.wants_chart("What's the trend here?")
-    assert not chart_helper.wants_chart("Is there a trend?")
+def test_heuristic_trend_alone_without_time_cue_has_no_positive_signal():
+    # "trend" without an explicit time/breakdown cue is too vague for the
+    # fast regex heuristic to commit to on its own -- it falls through to
+    # the LLM fallback instead (see the mocked test_wants_chart_llm_*
+    # tests below for that path).
+    assert not chart_helper._wants_chart_heuristic("What's the trend here?")
+    assert not chart_helper._wants_chart_heuristic("Is there a trend?")
+
+
+def test_wants_chart_llm_fallback_catches_unusual_phrasing():
+    # Regression case motivating the LLM fallback: a genuine chart
+    # request that uses none of the expected verbs and has no
+    # trend+time-cue pattern, so the regex heuristic alone would
+    # incorrectly say no.
+    mock_resp = MagicMock()
+    mock_resp.text = "YES"
+    with patch.object(chart_helper._client.models, "generate_content", return_value=mock_resp):
+        assert chart_helper.wants_chart("Can I see this broken down by year instead of one number?")
+
+
+def test_wants_chart_llm_fallback_says_no_for_genuinely_plain_question():
+    mock_resp = MagicMock()
+    mock_resp.text = "NO"
+    with patch.object(chart_helper._client.models, "generate_content", return_value=mock_resp):
+        assert not chart_helper.wants_chart("What is the total cohort size?")
+
+
+def test_wants_chart_llm_fallback_fails_closed_on_api_error():
+    # An API error/timeout during the fallback must not crash the turn --
+    # falls back to "no chart", same as a plain table response.
+    with patch.object(chart_helper._client.models, "generate_content", side_effect=Exception("timeout")):
+        assert not chart_helper.wants_chart("Can I see this a different way?")
+
+
+def test_wants_chart_llm_fallback_never_called_when_heuristic_already_true():
+    # The LLM must not be invoked at all when the fast heuristic already
+    # found a positive signal -- verifies the "only call LLM as fallback"
+    # cost-control design, not just the end-to-end behavior.
+    with patch.object(chart_helper, "_wants_chart_llm") as mock_llm:
+        assert chart_helper.wants_chart("Plot the graduation rate trend")
+        mock_llm.assert_not_called()
+
+
+def test_wants_chart_exclusions_veto_even_if_llm_would_say_yes():
+    # The domain-specific exclusion list must win even over what the LLM
+    # fallback would otherwise decide -- exclusions encode certainty the
+    # LLM prompt doesn't have, so they short-circuit before any API call.
+    with patch.object(chart_helper, "_wants_chart_llm") as mock_llm:
+        assert not chart_helper.wants_chart("Is there a data lineage graph for this pipeline?")
+        mock_llm.assert_not_called()
 
 
 def test_wants_chart_trend_with_time_cue_is_true():
