@@ -118,10 +118,33 @@ def test_multi_series_by_group_is_chartable():
         "graduation_rate_pct": [10.0, 15.0, 12.0, 18.0],
     })
     assert chart_helper.has_chartable_shape(df)
-    fig = chart_helper.build_chart(df)
+    # Grouping only kicks in when the question references the dimension
+    # (here, "pell") -- see test_group_column_requires_question_reference
+    # for the case where it's correctly suppressed.
+    fig = chart_helper.build_chart(df, question="chart graduation rate by pell over terms")
     assert fig is not None
     # Multi-series chart should have one trace per group (Y, N)
     assert len(fig.data) == 2
+
+
+def test_group_column_requires_question_reference():
+    # Regression: an incidental categorical column in the result (e.g.
+    # degtype, present only because a join pulled it in) must NOT become
+    # an unrequested grouping dimension just because it has low
+    # cardinality. Only groups when the question actually references the
+    # column name or one of its values.
+    df = pd.DataFrame({
+        "term_code": [201510, 201510, 201510, 201590, 201590, 201590],
+        "degtype": ["BS", "MS", "PHD", "BS", "MS", "PHD"],
+        "student_count": [100, 50, 10, 110, 55, 12],
+    })
+    fig_no_mention = chart_helper.build_chart(df, question="plot student count by term")
+    assert fig_no_mention is not None
+    assert len(fig_no_mention.data) == 1
+
+    fig_with_mention = chart_helper.build_chart(df, question="plot student count by term and degtype")
+    assert fig_with_mention is not None
+    assert len(fig_with_mention.data) == 3
 
 
 def test_all_string_columns_not_chartable():

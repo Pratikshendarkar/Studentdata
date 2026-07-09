@@ -139,13 +139,29 @@ def _find_numeric_columns(df: pd.DataFrame, exclude: str | None) -> list[str]:
     ]
 
 
-def _find_group_column(df: pd.DataFrame, x_col: str, numeric_cols: list[str]) -> str | None:
-    """A second low-cardinality categorical column (besides x_col) to
-    split multiple series by, e.g. pell/school/gender."""
+def _find_group_column(df: pd.DataFrame, x_col: str, numeric_cols: list[str], question: str | None) -> str | None:
+    """
+    A second low-cardinality categorical column (besides x_col) to split
+    multiple series by, e.g. pell/school/gender -- but ONLY if the
+    question actually references that dimension (by column name, e.g.
+    "by pell", or by one of its own distinct values, e.g. "Y vs N").
+    Without this check, any incidental categorical column sitting in the
+    SELECT (e.g. degtype, present only because a JOIN pulled it in) would
+    silently turn a simple single-line request ("plot student count by
+    term") into an unrequested multi-line breakdown the user never asked
+    for.
+    """
+    if not question:
+        return None
+    q_lower = question.lower()
     for col in df.columns:
         if col == x_col or col in numeric_cols:
             continue
-        if not pd.api.types.is_numeric_dtype(df[col]) and 1 < df[col].nunique() <= 12:
+        if pd.api.types.is_numeric_dtype(df[col]) or not (1 < df[col].nunique() <= 12):
+            continue
+        col_name_words = col.lower().replace("_", " ")
+        distinct_values = [str(v).lower() for v in df[col].dropna().unique()]
+        if col_name_words in q_lower or any(v in q_lower for v in distinct_values):
             return col
     return None
 
@@ -201,7 +217,7 @@ def build_chart(df: pd.DataFrame, question: str | None = None):
     df = _coerce_numeric_looking_columns(df)
     x_col = _find_x_column(df)
     numeric_cols = _find_numeric_columns(df, exclude=x_col)
-    group_col = _find_group_column(df, x_col, numeric_cols)
+    group_col = _find_group_column(df, x_col, numeric_cols, question)
 
     is_ordered_axis = _is_time_axis_column(x_col)
     plot_df = df.sort_values(x_col) if is_ordered_axis else df.copy()
