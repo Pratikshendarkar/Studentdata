@@ -209,3 +209,28 @@ def test_genuinely_categorical_string_column_not_coerced():
     coerced = chart_helper._coerce_numeric_looking_columns(df)
     assert not pd.api.types.is_numeric_dtype(coerced["SCHOOL"])
     assert list(coerced["SCHOOL"]) == ["AD", "CC", "EN", "SL", "SM"]
+
+
+def test_secondary_time_column_not_picked_as_metric():
+    # Regression: "Visualize enrollment by term" against a result with
+    # both TERM_CODE (x-axis) and TERM_YEAR (a second time dimension,
+    # also numeric) alongside the real metric STUDENT_COUNT. TERM_YEAR
+    # must never be picked as the y-axis metric just because it's
+    # numeric and isn't the chosen x_col -- it's still a time column, not
+    # a measurement.
+    df = pd.DataFrame({
+        "TERM_CODE": [201510, 201590, 201610, 201690],
+        "TERM_YEAR": [2015, 2015, 2016, 2016],
+        "TERM_SEASON": ["Spring", "Fall", "Spring", "Fall"],
+        "STUDENT_COUNT": [2279, 2350, 2300, 2400],
+    })
+    x_col = chart_helper._find_x_column(df)
+    numeric_cols = chart_helper._find_numeric_columns(df, exclude=x_col)
+    assert numeric_cols == ["STUDENT_COUNT"]
+
+    fig = chart_helper.build_chart(df, question="Visualize enrollment by term for Master's students")
+    assert fig is not None
+    for trace in fig.data:
+        assert list(trace.y) != [2015, 2015] and list(trace.y) != [2016, 2016]
+    all_y_values = [v for trace in fig.data for v in trace.y]
+    assert set(all_y_values).issubset({2279, 2350, 2300, 2400})

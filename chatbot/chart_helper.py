@@ -124,9 +124,18 @@ def _find_x_column(df: pd.DataFrame) -> str | None:
 
 
 def _find_numeric_columns(df: pd.DataFrame, exclude: str | None) -> list[str]:
+    """
+    Numeric columns eligible to be a y-axis metric. Excludes the chosen
+    x_col AND any other time-shaped column (e.g. term_year alongside a
+    term_code x-axis) -- a secondary time dimension is not a metric and
+    must never be picked as "the" numeric value to plot, even
+    positionally as numeric_cols[0].
+    """
     return [
         col for col in df.columns
-        if col != exclude and pd.api.types.is_numeric_dtype(df[col])
+        if col != exclude
+        and pd.api.types.is_numeric_dtype(df[col])
+        and not _is_time_axis_column(col)
     ]
 
 
